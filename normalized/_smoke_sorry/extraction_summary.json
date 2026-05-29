@@ -1,0 +1,9 @@
+[
+  {
+    "source_key": "sorrybench",
+    "dataset": "AIM-Harvard/sorrybench",
+    "split": "train",
+    "output_file": "LLM Evaluation/question_bank_workspace/normalized/_smoke_sorry/sorrybench_candidates.jsonl",
+    "count": 2
+  }
+]

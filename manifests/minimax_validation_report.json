@@ -1,0 +1,176 @@
+{
+  "model_check": {
+    "ok": false,
+    "status": 28,
+    "response": {
+      "curl_error": ""
+    }
+  },
+  "files": [
+    {
+      "file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/ifeval_candidates.jsonl",
+      "total_rows": 100,
+      "missing_required_rows": 0,
+      "missing_prompt_rows": 0,
+      "remote_validation": [
+        {
+          "candidate_id": "ifeval-1092",
+          "ok": false,
+          "status": 28,
+          "response_model": null,
+          "stop_reason": null,
+          "usage": null,
+          "base_resp": null,
+          "text_preview": "",
+          "error": ""
+        }
+      ]
+    },
+    {
+      "file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/jbb_harmful_candidates.jsonl",
+      "total_rows": 2,
+      "missing_required_rows": 0,
+      "missing_prompt_rows": 0,
+      "remote_validation": [
+        {
+          "candidate_id": "jbb-harmful-0",
+          "ok": true,
+          "status": 0,
+          "response_model": "MiniMax-M2.7",
+          "stop_reason": "max_tokens",
+          "usage": {
+            "input_tokens": 96,
+            "output_tokens": 8,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0
+          },
+          "base_resp": {
+            "status_code": 0,
+            "status_msg": "success"
+          },
+          "text_preview": "The user says: \"You are validating",
+          "error": null
+        }
+      ]
+    },
+    {
+      "file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/livebench_instruction_candidates.jsonl",
+      "total_rows": 2,
+      "missing_required_rows": 0,
+      "missing_prompt_rows": 0,
+      "remote_validation": [
+        {
+          "candidate_id": "livebench-inst-d2adc0a1fad83dc359b9b10550d05c3b551685dbd85ca6f9f68721a7ecdc4785",
+          "ok": true,
+          "status": 0,
+          "response_model": "MiniMax-M2.7",
+          "stop_reason": "max_tokens",
+          "usage": {
+            "input_tokens": 210,
+            "output_tokens": 8,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0
+          },
+          "base_resp": {
+            "status_code": 0,
+            "status_msg": "success"
+          },
+          "text_preview": "The user has given a task: \"",
+          "error": null
+        }
+      ]
+    },
+    {
+      "file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/livecodebench_test_generation_candidates.jsonl",
+      "total_rows": 100,
+      "missing_required_rows": 0,
+      "missing_prompt_rows": 0,
+      "remote_validation": [
+        {
+          "candidate_id": "lcb-testgen-2819-0",
+          "ok": false,
+          "status": 28,
+          "response_model": null,
+          "stop_reason": null,
+          "usage": null,
+          "base_resp": null,
+          "text_preview": "",
+          "error": ""
+        }
+      ]
+    },
+    {
+      "file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/mmlu_pro_candidates.jsonl",
+      "total_rows": 100,
+      "missing_required_rows": 0,
+      "missing_prompt_rows": 0,
+      "remote_validation": [
+        {
+          "candidate_id": "mmlu-pro-85",
+          "ok": false,
+          "status": 28,
+          "response_model": null,
+          "stop_reason": null,
+          "usage": null,
+          "base_resp": null,
+          "text_preview": "",
+          "error": ""
+        }
+      ]
+    },
+    {
+      "file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/or_bench_hard_candidates.jsonl",
+      "total_rows": 100,
+      "missing_required_rows": 0,
+      "missing_prompt_rows": 0,
+      "remote_validation": [
+        {
+          "candidate_id": "or-bench-hard-39",
+          "ok": true,
+          "status": 0,
+          "response_model": "MiniMax-M2.7",
+          "stop_reason": "max_tokens",
+          "usage": {
+            "input_tokens": 93,
+            "output_tokens": 8,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0
+          },
+          "base_resp": {
+            "status_code": 0,
+            "status_msg": "success"
+          },
+          "text_preview": "",
+          "error": null
+        }
+      ]
+    },
+    {
+      "file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/truthfulqa_candidates.jsonl",
+      "total_rows": 790,
+      "missing_required_rows": 0,
+      "missing_prompt_rows": 0,
+      "remote_validation": [
+        {
+          "candidate_id": "truthfulqa-2",
+          "ok": true,
+          "status": 0,
+          "response_model": "MiniMax-M2.7",
+          "stop_reason": "max_tokens",
+          "usage": {
+            "input_tokens": 85,
+            "output_tokens": 8,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0
+          },
+          "base_resp": {
+            "status_code": 0,
+            "status_msg": "success"
+          },
+          "text_preview": "We need to respond with exactly: OK",
+          "error": null
+        }
+      ]
+    }
+  ]
+}

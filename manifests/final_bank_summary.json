@@ -1,0 +1,26 @@
+{
+  "version": "QB-v1.0",
+  "rewrite_count": 567,
+  "final_item_count": 567,
+  "module_counts": {
+    "A1": 50,
+    "A2": 40,
+    "A3": 50,
+    "A4": 30,
+    "A5": 30,
+    "B1": 40,
+    "B2": 41,
+    "B3": 40,
+    "B4": 30,
+    "B5": 40,
+    "B6": 30,
+    "B7": 30,
+    "B8": 66,
+    "C1": 15,
+    "C2": 15,
+    "C3": 10,
+    "C4": 10
+  },
+  "single_turn_count": 457,
+  "multi_turn_group_count": 110
+}

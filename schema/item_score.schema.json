@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "QuestionBankItemScore",
+  "type": "object",
+  "required": [
+    "run_id",
+    "attempt_run_id",
+    "source_run_id",
+    "provider_id",
+    "model_alias",
+    "question_id",
+    "module",
+    "item_format",
+    "score_method",
+    "primary_score",
+    "status",
+    "failure_type",
+    "latency_ms",
+    "is_retry_attempt",
+    "canonical_selected"
+  ],
+  "properties": {
+    "run_id": {
+      "type": "string"
+    },
+    "attempt_run_id": {
+      "type": "string"
+    },
+    "source_run_id": {
+      "type": "string"
+    },
+    "provider_id": {
+      "type": "string"
+    },
+    "model_alias": {
+      "type": "string"
+    },
+    "question_id": {
+      "type": "string"
+    },
+    "module": {
+      "type": "string"
+    },
+    "item_format": {
+      "type": "string"
+    },
+    "score_method": {
+      "type": "string"
+    },
+    "primary_score": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "aux_score": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "ok",
+        "failed"
+      ]
+    },
+    "failure_type": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "latency_ms": {
+      "type": "integer"
+    },
+    "is_retry_attempt": {
+      "type": "boolean"
+    },
+    "canonical_selected": {
+      "type": "boolean"
+    },
+    "response": {},
+    "score_details": {
+      "type": "object"
+    },
+    "error": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}

@@ -1,0 +1,177 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "QuestionBankFinalItemSpec",
+  "type": "object",
+  "required": [
+    "question_id",
+    "version",
+    "module",
+    "subtype",
+    "item_format",
+    "scoring_method",
+    "qa_status",
+    "rotation_policy",
+    "provenance"
+  ],
+  "properties": {
+    "question_id": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    },
+    "module": {
+      "type": "string"
+    },
+    "subtype": {
+      "type": "string"
+    },
+    "item_format": {
+      "type": "string",
+      "enum": [
+        "single_turn",
+        "multi_turn_group"
+      ]
+    },
+    "difficulty": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "easy",
+        "medium",
+        "hard",
+        null
+      ]
+    },
+    "drift_role": {
+      "type": "string",
+      "enum": [
+        "capability",
+        "safety",
+        "probe"
+      ]
+    },
+    "prompt_template": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "turn_script": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "object",
+        "required": [
+          "turn_index",
+          "speaker",
+          "content_template"
+        ],
+        "properties": {
+          "turn_index": {
+            "type": "integer"
+          },
+          "speaker": {
+            "type": "string",
+            "enum": [
+              "system",
+              "user",
+              "assistant"
+            ]
+          },
+          "content_template": {
+            "type": "string"
+          },
+          "branch_key": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "ground_truth": {
+      "type": [
+        "string",
+        "number",
+        "null"
+      ]
+    },
+    "scoring_method": {
+      "type": "string"
+    },
+    "scoring_params": {
+      "type": "object"
+    },
+    "module_quota_tag": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "qa_status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "pilot",
+        "ready",
+        "frozen",
+        "retired"
+      ]
+    },
+    "rotation_policy": {
+      "type": "object",
+      "required": [
+        "replaceable",
+        "rotation_priority"
+      ],
+      "properties": {
+        "replaceable": {
+          "type": "boolean"
+        },
+        "rotation_priority": {
+          "type": "integer"
+        },
+        "expected_lifespan_days": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "required": [
+        "rewrite_ids",
+        "source_candidate_ids",
+        "transformation_summary"
+      ],
+      "properties": {
+        "rewrite_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "source_candidate_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "transformation_summary": {
+          "type": "string"
+        }
+      }
+    },
+    "notes": {
+      "type": "string"
+    }
+  }
+}

@@ -1,0 +1,9 @@
+[
+  {
+    "source_key": "squad",
+    "dataset": "rajpurkar/squad",
+    "split": "validation",
+    "output_file": "LLM Evaluation/question_bank_workspace/normalized/_smoke_squad/squad_candidates.jsonl",
+    "count": 2
+  }
+]

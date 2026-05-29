@@ -1,0 +1,30 @@
+# Runtime outputs
+manifests/evaluation_runs/
+*.log
+
+# Local secrets
+.env
+.env.*
+!.env.example
+
+# Downloaded source archives and caches
+raw_sources/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Frontend dependencies and builds
+frontend/node_modules/
+frontend/dist/
+
+# Local toolchains and virtual environments
+.tools/
+.venv/
+venv/
+
+# Local editor noise
+.DS_Store
+Thumbs.db

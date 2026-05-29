@@ -1,0 +1,9 @@
+[
+  {
+    "source_key": "gsm8k",
+    "dataset": "openai/gsm8k",
+    "split": "train",
+    "output_file": "LLM Evaluation/question_bank_workspace/normalized/_smoke_gsm8k/gsm8k_candidates.jsonl",
+    "count": 2
+  }
+]

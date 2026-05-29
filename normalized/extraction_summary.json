@@ -1,0 +1,93 @@
+[
+  {
+    "source_key": "ifeval",
+    "dataset": "google/IFEval",
+    "split": "train",
+    "output_file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/ifeval_candidates.jsonl",
+    "count": 541
+  },
+  {
+    "source_key": "mmlu_pro",
+    "dataset": "TIGER-Lab/MMLU-Pro",
+    "split": "test",
+    "output_file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/mmlu_pro_candidates.jsonl",
+    "count": 12032
+  },
+  {
+    "source_key": "jbb_harmful",
+    "dataset": "JailbreakBench/JBB-Behaviors",
+    "split": "harmful",
+    "output_file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/jbb_harmful_candidates.jsonl",
+    "count": 100
+  },
+  {
+    "source_key": "livebench_instruction",
+    "dataset": "livebench/instruction_following",
+    "split": "test",
+    "output_file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/livebench_instruction_candidates.jsonl",
+    "count": 400
+  },
+  {
+    "source_key": "gsm8k",
+    "dataset": "openai/gsm8k",
+    "split": "train",
+    "output_file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/gsm8k_candidates.jsonl",
+    "count": 7473
+  },
+  {
+    "source_key": "sorrybench",
+    "dataset": "AIM-Harvard/sorrybench",
+    "split": "train",
+    "output_file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/sorrybench_candidates.jsonl",
+    "count": 9446
+  },
+  {
+    "source_key": "squad",
+    "dataset": "rajpurkar/squad",
+    "split": "validation",
+    "output_file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/squad_candidates.jsonl",
+    "count": 10570
+  },
+  {
+    "source_key": "hotpotqa",
+    "dataset": "hotpotqa/hotpot_qa",
+    "split": "validation",
+    "output_file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/hotpotqa_candidates.jsonl",
+    "count": 7405
+  },
+  {
+    "source_key": "cnn_dailymail",
+    "dataset": "ccdv/cnn_dailymail",
+    "split": "validation",
+    "output_file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/cnn_dailymail_candidates.jsonl",
+    "count": 13368
+  },
+  {
+    "source_key": "cnn_dailymail_cnn_subset",
+    "dataset": "ccdv/cnn_dailymail",
+    "split": "validation/cnn_subset",
+    "output_file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/cnn_dailymail_cnn_subset_candidates.jsonl",
+    "count": 1220
+  },
+  {
+    "source_key": "truthfulqa",
+    "dataset": "truthfulqa/truthful_qa",
+    "split": "generation",
+    "output_file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/truthfulqa_candidates.jsonl",
+    "count": 790
+  },
+  {
+    "source_key": "or_bench_hard",
+    "dataset": "bench-llm/or-bench",
+    "split": "train",
+    "output_file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/or_bench_hard_candidates.jsonl",
+    "count": 1319
+  },
+  {
+    "source_key": "livecodebench_test_generation",
+    "dataset": "livecodebench/test_generation",
+    "split": "test",
+    "output_file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/livecodebench_test_generation_candidates.jsonl",
+    "count": 442
+  }
+]

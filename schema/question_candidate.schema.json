@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "QuestionBankPublicCandidate",
+  "type": "object",
+  "required": [
+    "candidate_id",
+    "source_name",
+    "source_dataset",
+    "source_url",
+    "original_id",
+    "module_candidates",
+    "task_family",
+    "scoring_method",
+    "direct_reuse_allowed",
+    "rewrite_guidance"
+  ],
+  "properties": {
+    "candidate_id": {
+      "type": "string"
+    },
+    "source_name": {
+      "type": "string"
+    },
+    "source_dataset": {
+      "type": "string"
+    },
+    "source_split": {
+      "type": "string"
+    },
+    "source_url": {
+      "type": "string"
+    },
+    "original_id": {
+      "type": "string"
+    },
+    "module_candidates": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "task_family": {
+      "type": "string"
+    },
+    "category": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "prompt": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "turns": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "options": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "answer": {
+      "type": [
+        "string",
+        "number",
+        "null"
+      ]
+    },
+    "scoring_method": {
+      "type": "string"
+    },
+    "scoring_params": {
+      "type": "object"
+    },
+    "anti_contamination_source": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "source_metadata": {
+      "type": "object"
+    },
+    "direct_reuse_allowed": {
+      "type": "boolean"
+    },
+    "rewrite_guidance": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    }
+  }
+}

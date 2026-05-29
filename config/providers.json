@@ -1,0 +1,104 @@
+{
+  "providers": [
+    {
+      "provider_id": "anthropic_official",
+      "display_name": "Anthropic Official",
+      "protocol": "anthropic_compatible",
+      "base_url": "https://api.anthropic.com/v1",
+      "auth_scheme": "x_api_key",
+      "auth_env": "ANTHROPIC_API_KEY",
+      "headers_template": {
+        "anthropic-version": "2023-06-01"
+      },
+      "model_lookup_mode": "skip",
+      "enabled": true
+    },
+    {
+      "provider_id": "google_gemini",
+      "display_name": "Google Gemini",
+      "protocol": "gemini",
+      "base_url": "https://generativelanguage.googleapis.com/v1beta",
+      "auth_scheme": "x_goog_api_key",
+      "auth_env": "GOOGLE_API_KEY",
+      "headers_template": {},
+      "model_lookup_mode": "get_single",
+      "enabled": true
+    },
+    {
+      "provider_id": "minimax_anthropic",
+      "display_name": "MiniMax Anthropic-Compatible",
+      "protocol": "anthropic_compatible",
+      "base_url": "https://api.minimaxi.com/anthropic/v1",
+      "auth_scheme": "x_api_key",
+      "auth_env": "MINIMAX_API_KEY",
+      "headers_template": {},
+      "model_lookup_mode": "get_single",
+      "enabled": true
+    },
+    {
+      "provider_id": "minimax_anthropic_chat",
+      "display_name": "MiniMax Anthropic-Compatible Backup",
+      "protocol": "anthropic_compatible",
+      "base_url": "https://api.minimax.chat/anthropic/v1",
+      "auth_scheme": "x_api_key",
+      "auth_env": "MINIMAX_API_KEY",
+      "headers_template": {},
+      "model_lookup_mode": "skip",
+      "enabled": true
+    },
+    {
+      "provider_id": "mock_local",
+      "display_name": "Mock Local Provider",
+      "protocol": "mock",
+      "base_url": "mock://local",
+      "auth_scheme": "none",
+      "auth_env": "",
+      "headers_template": {},
+      "model_lookup_mode": "skip",
+      "enabled": true
+    },
+    {
+      "provider_id": "openai_default",
+      "display_name": "OpenAI-Compatible",
+      "protocol": "openai_compatible",
+      "base_url": "https://api.openai.com/v1",
+      "auth_scheme": "bearer",
+      "auth_env": "OPENAI_API_KEY",
+      "headers_template": {},
+      "model_lookup_mode": "list_contains",
+      "enabled": true
+    }
+  ],
+  "models": [
+    {
+      "model_alias": "minimax_m2_7",
+      "provider_id": "minimax_anthropic",
+      "display_name": "MiniMax M2.7",
+      "model_name": "MiniMax-M2.7",
+      "default_timeout": 45,
+      "default_max_tokens": 512,
+      "supports_multi_turn": true,
+      "enabled": true
+    },
+    {
+      "model_alias": "minimax_m2_7_chat",
+      "provider_id": "minimax_anthropic_chat",
+      "display_name": "MiniMax M2.7 Backup",
+      "model_name": "MiniMax-M2.7",
+      "default_timeout": 60,
+      "default_max_tokens": 128,
+      "supports_multi_turn": true,
+      "enabled": true
+    },
+    {
+      "model_alias": "mock_echo",
+      "provider_id": "mock_local",
+      "display_name": "Mock Echo",
+      "model_name": "mock-echo",
+      "default_timeout": 2,
+      "default_max_tokens": 128,
+      "supports_multi_turn": true,
+      "enabled": true
+    }
+  ]
+}

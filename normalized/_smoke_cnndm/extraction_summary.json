@@ -1,0 +1,9 @@
+[
+  {
+    "source_key": "cnn_dailymail",
+    "dataset": "ccdv/cnn_dailymail",
+    "split": "validation",
+    "output_file": "LLM Evaluation/question_bank_workspace/normalized/_smoke_cnndm/cnn_dailymail_candidates.jsonl",
+    "count": 2
+  }
+]
