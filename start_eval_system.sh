@@ -4,6 +4,13 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 export NVM_DIR="${HOME}/.nvm"
 
+if [[ -f "${ROOT_DIR}/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  . "${ROOT_DIR}/.env"
+  set +a
+fi
+
 if [[ -s "${NVM_DIR}/nvm.sh" ]]; then
   # shellcheck disable=SC1090
   . "${NVM_DIR}/nvm.sh"

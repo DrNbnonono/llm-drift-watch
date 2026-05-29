@@ -33,13 +33,15 @@
 | `squad_candidates.jsonl` | 10570 | A4 | ✅ 完整来源快照 |
 | `sorrybench_candidates.jsonl` | 9446 | B1 | ✅ 完整来源快照 |
 | `truthfulqa_candidates.jsonl` | 790 | B4 | ✅ 完整来源快照 |
-| `cnn_dailymail_cnn_subset_candidates.jsonl` | 1220 | A4 | ⚠️ 仅 CNN 半边，缺 DailyMail |
-| `ifeval_candidates.jsonl` | 100 | A3/C2/C3 | ❌ 部分 |
-| `mmlu_pro_candidates.jsonl` | 100 | A5 | ❌ 部分 |
-| `jbb_harmful_candidates.jsonl` | 2 | B1/B2 | ❌ 部分 |
-| `livebench_instruction_candidates.jsonl` | 2 | A3/C2 | ❌ 部分 |
-| `livecodebench_test_generation_candidates.jsonl` | 100 | A2 | ⚠️ 种子 |
-| `or_bench_hard_candidates.jsonl` | 100 | B3 | ⚠️ 种子 |
+| `cnn_dailymail_candidates.jsonl` | 13368 | A4 | ✅ CNN + DailyMail 候选快照 |
+| `cnn_dailymail_cnn_subset_candidates.jsonl` | 1220 | A4 | ✅ CNN 验证子集 |
+| `hotpotqa_candidates.jsonl` | 7405 | A4 | ✅ 多跳问答候选快照 |
+| `ifeval_candidates.jsonl` | 541 | A3/C2/C3 | ✅ 完整来源快照 |
+| `mmlu_pro_candidates.jsonl` | 12032 | A5 | ✅ 完整来源快照 |
+| `jbb_harmful_candidates.jsonl` | 100 | B1/B2 | ✅ harmful 候选快照 |
+| `livebench_instruction_candidates.jsonl` | 400 | A3/C2 | ✅ instruction following 候选快照 |
+| `livecodebench_test_generation_candidates.jsonl` | 442 | A2 | ✅ test generation 候选快照 |
+| `or_bench_hard_candidates.jsonl` | 1319 | B3 | ✅ hard 子集候选快照 |
 
 **状态说明**：
 - `完整来源快照`：公开来源已实质完整
@@ -78,6 +80,7 @@
 当前内置 provider:
 
 - `minimax_anthropic`
+- `minimax_anthropic_chat`
 - `anthropic_official`
 - `openai_default`
 - `google_gemini`
@@ -100,6 +103,7 @@
 
 ```bash
 cd "LLM Evaluation/question_bank_workspace"
+export MINIMAX_API_KEY="你的 MiniMax key"
 python3 scripts/run_evaluation_api.py
 ```
 
@@ -124,6 +128,7 @@ npm run dev
 
 - 前端目录已自带 `.npmrc`，默认走国内镜像 `https://registry.npmmirror.com/`
 - `package.json` 已改为直接调用本地 `node_modules/vite/bin/vite.js`，减少 `.bin` 链接异常影响
+- 项目根目录可放本地 `.env`，一键脚本会自动读取；`.env` 已被 `.gitignore` 排除
 - 也可以直接运行一键脚本：
 
 ```bash
@@ -147,9 +152,10 @@ VITE_API_BASE=http://127.0.0.1:8000 npm run dev
 
 ## 已验证的评测链路
 
-- Smoke run 已完成：成功对 A2/A3 拿到评分
-- A1/A4 因题目较长在当前网络条件下超时，需优化重试策略
-- 运行结果落在 `manifests/evaluation_runs/`
+- MiniMax `MiniMax-M2.7` 已通过备用 Anthropic-compatible Provider 跑通 C2 smoke 题
+- 首轮 run `20260529T124330Z-6bcb62b3` 因网关连接超时失败，系统记录为 `connect_timeout`
+- 失败题 retry run `20260529T124500Z-9c0f6bc4` 成功返回 `40`，C2 单题得分 `1.0`
+- canonical 汇总和 Markdown 报告已生成，运行结果落在 `manifests/evaluation_runs/`
 
 ## 关键产物位置
 
@@ -162,22 +168,21 @@ VITE_API_BASE=http://127.0.0.1:8000 npm run dev
 - 正式题库: `final_bank_specs/generated/final_bank_items.jsonl`
 - 模型非密钥配置: `config/providers.json`
 
-## 待完成项
+## 后续优化
 
-### P0：补齐公开候选层
-1. IFEval、MMLU-Pro、JailbreakBench、LiveBench instruction_following 扩展为完整快照
-2. LiveCodeBench、OR-Bench 从种子扩展为完整候选
-3. CNN/DailyMail 补齐 DailyMail 半边
-4. HotpotQA 下载原始文件补入 A4 多跳推理候选
+### P0：提升运行稳定性
+1. 将 Provider/model 配置从文件写入升级为带锁或 SQLite，避免多个后端进程同时写配置
+2. 为 MiniMax 国内 URL 和备用 URL 增加健康检查与自动切换
+3. 增加 run 取消能力，避免网络长超时时只能等待
 
-### P1：提升题库质量
-1. 从现有候选层生成高质量改写草案
-2. 冻结正式题库的评分方法和轮换策略
-3. 优化长题的超时和重试策略
+### P1：提升前端体验
+1. 模型管理弹窗继续压缩字段密度并补充环境变量复制按钮
+2. 实时监控增加每模块完成数和最近失败题列表
+3. 历史 Runs 增加一键打开 canonical 报告入口
 
-### P2：补充高级模块
-1. 生成多轮安全组（B5/B6/B7）
-2. 冻结探针集（C1/C2/C3/C4）
+### P2：提升评测规模
+1. 为全量 run 增加断点续跑和失败题批量重试队列
+2. 增加 SQLite/轻量任务表，用于多模型、多轮次评测的长期管理
 
 ## 设计原则
 
