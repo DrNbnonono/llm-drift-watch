@@ -10,7 +10,7 @@ const RUN_VIEWS = [
   { key: "items", label: "逐题结果" },
   { key: "timeline", label: "多轮时间线" },
   { key: "bank", label: "题库浏览" },
-  { key: "models", label: "模型管理" },
+  { key: "models", label: "模型接入" },
   { key: "history", label: "历史 Runs" },
   { key: "reports", label: "报告" },
 ];
@@ -45,8 +45,12 @@ const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
 async function apiFetch(path, options = {}) {
   try {
+    const headers = { ...(options.headers || {}) };
+    if (options.body && !headers["Content-Type"]) {
+      headers["Content-Type"] = "application/json";
+    }
     const response = await fetch(`${API_BASE}${path}`, {
-      headers: { "Content-Type": "application/json" },
+      headers,
       ...options,
     });
     if (!response.ok) {
@@ -67,6 +71,21 @@ async function apiFetch(path, options = {}) {
     }
     throw error;
   }
+}
+
+async function fetchReportUntilReady(runId, attempts = 8, delayMs = 1200) {
+  let lastError = null;
+  for (let index = 0; index < attempts; index += 1) {
+    try {
+      return await apiFetch(`/api/reports/${runId}`);
+    } catch (error) {
+      lastError = error;
+      if (index < attempts - 1) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+  }
+  throw lastError || new Error("读取报告失败");
 }
 
 function asPrettyJson(value) {
@@ -92,6 +111,17 @@ function briefText(text, maxLen = 90) {
   }
   const compact = String(text).replace(/\s+/g, " ").trim();
   return compact.length > maxLen ? `${compact.slice(0, maxLen)}...` : compact;
+}
+
+function getRunCounts(run) {
+  const progress = run?.progress || {};
+  const totals = run?.totals || {};
+  const total = progress.items_total ?? totals.items_total ?? 0;
+  const processed = progress.items_processed ?? progress.items_completed ?? totals.items_processed ?? totals.items_completed ?? 0;
+  const failed = progress.items_failed ?? totals.items_failed ?? 0;
+  const succeeded = progress.items_succeeded ?? totals.items_succeeded ?? Math.max(0, processed - failed);
+  const inflight = progress.items_inflight ?? Math.max(0, total - processed);
+  return { total, processed, succeeded, failed, inflight };
 }
 
 function slugifyAlias(text) {
@@ -145,6 +175,138 @@ function ScoreCard({ title, value, tone = "neutral" }) {
       <div className="score-value">{value ?? "-"}</div>
     </div>
   );
+}
+
+function MiniTrendBar({ label, value, total, tone = "warm" }) {
+  const pct = total > 0 ? Math.max(0, Math.min(100, (value / total) * 100)) : 0;
+  return (
+    <div className="mini-bar-row">
+      <div className="mini-bar-head">
+        <span>{label}</span>
+        <strong>{formatValue(value)}</strong>
+      </div>
+      <div className="mini-bar-track">
+        <div className={`mini-bar-fill mini-bar-${tone}`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function ReportCharts({ reportData }) {
+  if (!reportData?.summary) {
+    return null;
+  }
+  const moduleRows = reportData.module_rows || [];
+  const maxModuleScore = Math.max(1, ...moduleRows.map((row) => row.score || 0));
+  const failureRows = Object.entries(reportData.failure_counts || {});
+  const failureTotal = failureRows.reduce((sum, [, count]) => sum + count, 0);
+  const statusCounts = reportData.status_counts || {};
+  const processed = reportData.summary?.totals?.items_processed || 0;
+  const succeeded = reportData.summary?.totals?.items_succeeded || 0;
+  const failed = reportData.summary?.totals?.items_failed || 0;
+  return (
+    <div className="report-dashboard">
+      <div className="report-grid">
+        <div className="detail-card report-chart-card">
+          <SectionTitle title="模块得分" meta={`共 ${moduleRows.length} 个模块`} />
+          {moduleRows.length ? moduleRows.map((row) => (
+            <MiniTrendBar key={row.module} label={row.module} value={row.score} total={maxModuleScore} tone="warm" />
+          )) : <div className="muted-text">当前没有可视化模块分。</div>}
+        </div>
+        <div className="detail-card report-chart-card">
+          <SectionTitle title="状态分布" meta={`Processed ${processed}`} />
+          <MiniTrendBar label="Succeeded" value={succeeded} total={Math.max(processed, 1)} tone="ok" />
+          <MiniTrendBar label="Failed" value={failed} total={Math.max(processed, 1)} tone="failed" />
+          <div className="report-stat-grid">
+            <SummaryMiniCard label="Retry Runs" value={reportData.lineage?.filter((item) => item.run_kind === "retry").length || 0} />
+            <SummaryMiniCard label="Canonical Items" value={reportData.summary?.totals?.items_total || 0} />
+          </div>
+        </div>
+      </div>
+      <div className="report-grid">
+        <div className="detail-card report-chart-card">
+          <SectionTitle title="失败类型分布" meta={`共 ${failureTotal} 次失败`} />
+          {failureRows.length ? failureRows.map(([failureType, count]) => (
+            <MiniTrendBar key={failureType} label={failureType} value={count} total={Math.max(failureTotal, 1)} tone="failed" />
+          )) : <div className="muted-text">当前没有失败类型。</div>}
+        </div>
+        <div className="detail-card report-chart-card">
+          <SectionTitle title="运行链路" meta={`共 ${reportData.lineage?.length || 0} 个 run`} />
+          <div className="lineage-list">
+            {(reportData.lineage || []).map((row) => (
+              <div className="lineage-row" key={row.run_id}>
+                <div>
+                  <div className="config-row-title mono">{row.run_id}</div>
+                  <div className="config-row-subtitle">{row.run_kind} / parent {row.parent_run_id || "-"}</div>
+                </div>
+                <span className={`chip ${row.status === "completed" ? "chip-ok" : "chip-failed"}`}>{row.status}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function renderInlineMarkdown(text, keyPrefix = "md") {
+  const chunks = String(text || "").split(/(`[^`]+`)/g);
+  return chunks.map((chunk, index) => {
+    if (chunk.startsWith("`") && chunk.endsWith("`")) {
+      return <code key={`${keyPrefix}-${index}`}>{chunk.slice(1, -1)}</code>;
+    }
+    return <React.Fragment key={`${keyPrefix}-${index}`}>{chunk}</React.Fragment>;
+  });
+}
+
+function MarkdownPreview({ content }) {
+  const lines = String(content || "").split(/\r?\n/);
+  const blocks = [];
+  let listBuffer = [];
+
+  function flushList() {
+    if (!listBuffer.length) return;
+    blocks.push(
+      <ul className="markdown-list" key={`list-${blocks.length}`}>
+        {listBuffer.map((item, index) => (
+          <li key={`list-item-${index}`}>{renderInlineMarkdown(item, `list-${index}`)}</li>
+        ))}
+      </ul>,
+    );
+    listBuffer = [];
+  }
+
+  lines.forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushList();
+      return;
+    }
+    if (trimmed.startsWith("- ")) {
+      listBuffer.push(trimmed.slice(2));
+      return;
+    }
+    flushList();
+    if (trimmed.startsWith("### ")) {
+      blocks.push(<h4 className="markdown-h4" key={`h4-${blocks.length}`}>{renderInlineMarkdown(trimmed.slice(4), `h4-${blocks.length}`)}</h4>);
+      return;
+    }
+    if (trimmed.startsWith("## ")) {
+      blocks.push(<h3 className="markdown-h3" key={`h3-${blocks.length}`}>{renderInlineMarkdown(trimmed.slice(3), `h3-${blocks.length}`)}</h3>);
+      return;
+    }
+    if (trimmed.startsWith("# ")) {
+      blocks.push(<h2 className="markdown-h2" key={`h2-${blocks.length}`}>{renderInlineMarkdown(trimmed.slice(2), `h2-${blocks.length}`)}</h2>);
+      return;
+    }
+    blocks.push(<p className="markdown-p" key={`p-${blocks.length}`}>{renderInlineMarkdown(trimmed, `p-${blocks.length}`)}</p>);
+  });
+  flushList();
+
+  if (!blocks.length) {
+    return <div className="muted-text">暂无报告内容。</div>;
+  }
+  return <div className="markdown-preview">{blocks}</div>;
 }
 
 function SectionTitle({ title, meta }) {
@@ -466,6 +628,7 @@ function App() {
   const [view, setView] = useState("create");
   const [providers, setProviders] = useState([]);
   const [models, setModels] = useState([]);
+  const [connections, setConnections] = useState([]);
   const [runs, setRuns] = useState([]);
   const [selectedRunId, setSelectedRunId] = useState(null);
   const [selectedRun, setSelectedRun] = useState(null);
@@ -489,16 +652,21 @@ function App() {
   const [loadingReport, setLoadingReport] = useState(false);
   const [editingProviderId, setEditingProviderId] = useState(null);
   const [editingModelAlias, setEditingModelAlias] = useState(null);
+  const [editingConnectionId, setEditingConnectionId] = useState(null);
   const [showProviderForm, setShowProviderForm] = useState(false);
   const [showModelForm, setShowModelForm] = useState(false);
+  const [showConnectionForm, setShowConnectionForm] = useState(false);
+  const [showAdvancedConfig, setShowAdvancedConfig] = useState(false);
   const [itemPage, setItemPage] = useState(1);
   const [itemPageSize, setItemPageSize] = useState(20);
   const [bankPage, setBankPage] = useState(1);
   const [bankPageSize, setBankPageSize] = useState(20);
+  const [selectedHistoryRunIds, setSelectedHistoryRunIds] = useState([]);
 
   const [runForm, setRunForm] = useState({
-    provider_id: "minimax_anthropic",
-    model_alias: "minimax_m2_7",
+    provider_id: "",
+    model_alias: "",
+    model_connection_id: "",
     modules: [],
     smoke: false,
     timeout: 45,
@@ -545,6 +713,26 @@ function App() {
     enabled: true,
   });
 
+  const [connectionForm, setConnectionForm] = useState({
+    connection_id: "",
+    vendor_name: "",
+    note: "",
+    homepage_url: "",
+    display_name: "",
+    protocol: "anthropic_compatible",
+    base_url: "",
+    auth_scheme: "x_api_key",
+    auth_env: "MINIMAX_API_KEY",
+    api_key: "",
+    model_name: "",
+    default_timeout: 45,
+    default_max_tokens: 512,
+    supports_multi_turn: true,
+    enabled: true,
+    headers_template_text: "{}",
+    model_lookup_mode: "skip",
+  });
+
   useEffect(() => {
     refreshProviders();
     refreshRuns();
@@ -586,6 +774,13 @@ function App() {
   ]);
 
   useEffect(() => {
+    setRunItems([]);
+    setRunItemsTotal(0);
+    setSelectedQuestionId(null);
+    setTimelineData(null);
+  }, [selectedRunId]);
+
+  useEffect(() => {
     setSelectedBankQuestionId(null);
     setBankRows([]);
     setBankTotal(0);
@@ -604,6 +799,11 @@ function App() {
   }, [bankFilters.module, bankFilters.subtype, bankFilters.item_format, bankFilters.keyword]);
 
   const selectedRunSummary = useMemo(() => selectedRun?.summary_metrics || {}, [selectedRun]);
+  const selectedRunCounts = useMemo(() => getRunCounts(selectedRun), [selectedRun]);
+  const selectedConnection = useMemo(
+    () => connections.find((connection) => connection.connection_id === runForm.model_connection_id) || null,
+    [connections, runForm.model_connection_id],
+  );
   const modelsForProvider = useMemo(
     () => models.filter((model) => model.provider_id === runForm.provider_id && model.enabled !== false),
     [models, runForm.provider_id],
@@ -647,6 +847,30 @@ function App() {
     return { total: models.length, enabled, multiTurn };
   }, [models]);
 
+  const connectionSummary = useMemo(() => {
+    const enabled = connections.filter((connection) => connection.enabled !== false).length;
+    const configured = connections.filter((connection) => connection.configured).length;
+    return { total: connections.length, enabled, configured };
+  }, [connections]);
+  const historySelection = useMemo(() => new Set(selectedHistoryRunIds), [selectedHistoryRunIds]);
+  const selectedHistoryRuns = useMemo(
+    () => runs.filter((run) => historySelection.has(run.run_id)),
+    [runs, historySelection],
+  );
+  const historySummary = useMemo(() => ({
+    total: runs.length,
+    reportReady: runs.filter((run) => run.report_ready).length,
+    retry: runs.filter((run) => (run.run_kind || "base") === "retry").length,
+  }), [runs]);
+  const reportCandidates = useMemo(
+    () => runs.filter((run) => run.report_ready || run.report_path || (run.execution_status || run.status) === "completed"),
+    [runs],
+  );
+  const visibleError = useMemo(() => (
+    error && !/question or run not found/i.test(error) ? error : ""
+  ), [error]);
+  const reportSummaryMetrics = useMemo(() => report?.summary?.summary_metrics || report?.summary_metrics || {}, [report]);
+
   useEffect(() => {
     if (selectedRunItem?.question_id && selectedRunItem.question_id !== selectedQuestionId) {
       setSelectedQuestionId(selectedRunItem.question_id);
@@ -666,15 +890,22 @@ function App() {
   }, [availableBankSubtypes, bankFilters.subtype]);
 
   useEffect(() => {
-    if (selectedRunId && selectedRunItem?.question_id) {
+    setSelectedHistoryRunIds((prev) => prev.filter((runId) => runs.some((run) => run.run_id === runId)));
+  }, [runs]);
+
+  useEffect(() => {
+    const itemBelongsToSelectedRun = selectedRunItem && (!selectedRunItem.run_id || selectedRunItem.run_id === selectedRunId);
+    const itemHasTimelineData = selectedRunItem && ["ok", "failed"].includes(selectedRunItem.status || "");
+    const runHasProcessedItems = !runIsActive || selectedRunCounts.processed > 0;
+    if (selectedRunId && selectedRunItem?.question_id && itemBelongsToSelectedRun && itemHasTimelineData && runHasProcessedItems) {
       loadTimeline(selectedRunId, selectedRunItem.question_id, itemFilters.canonical_only);
     } else {
       setTimelineData(null);
     }
-  }, [selectedRunId, selectedRunItem?.question_id, itemFilters.canonical_only]);
+  }, [selectedRunId, selectedRunItem, itemFilters.canonical_only, runIsActive, selectedRunCounts.processed]);
 
   useEffect(() => {
-    const shouldLock = showProviderForm || showModelForm;
+    const shouldLock = showProviderForm || showModelForm || showConnectionForm;
     const previousOverflow = document.body.style.overflow;
     if (shouldLock) {
       document.body.style.overflow = "hidden";
@@ -682,7 +913,18 @@ function App() {
     return () => {
       document.body.style.overflow = previousOverflow;
     };
-  }, [showProviderForm, showModelForm]);
+  }, [showProviderForm, showModelForm, showConnectionForm]);
+
+  useEffect(() => {
+    if (view !== "reports" || report || loadingReport) {
+      return;
+    }
+    const readyCandidate = reportCandidates.find((item) => item.report_ready);
+    const candidateRunId = (selectedRun && selectedRun.report_ready ? selectedRun.run_id : readyCandidate?.run_id) || null;
+    if (candidateRunId) {
+      handlePreviewReport(candidateRunId, { generateIfMissing: false });
+    }
+  }, [view, report, loadingReport, selectedRun, reportCandidates]);
 
   async function refreshProviders() {
     setLoadingProviders(true);
@@ -690,9 +932,19 @@ function App() {
       const data = await apiFetch("/api/providers");
       const nextProviders = data.providers || [];
       const nextModels = data.models || [];
+      const nextConnections = data.model_connections || [];
       setProviders(nextProviders);
       setModels(nextModels);
-      if ((!runForm.model_alias || !nextModels.some((item) => item.model_alias === runForm.model_alias)) && nextModels.length) {
+      setConnections(nextConnections);
+      if ((!runForm.model_connection_id || !nextConnections.some((item) => item.connection_id === runForm.model_connection_id)) && nextConnections.length) {
+        setRunForm((prev) => ({
+          ...prev,
+          model_connection_id: nextConnections[0].connection_id,
+          provider_id: nextConnections[0].provider_id,
+          model_alias: nextConnections[0].model_alias,
+          timeout: nextConnections[0].default_timeout || prev.timeout,
+        }));
+      } else if ((!runForm.model_alias || !nextModels.some((item) => item.model_alias === runForm.model_alias)) && nextModels.length) {
         setRunForm((prev) => ({
           ...prev,
           provider_id: nextModels[0].provider_id,
@@ -749,6 +1001,7 @@ function App() {
       setSelectedRun(runData);
       setRunItems(itemsData.items || []);
       setRunItemsTotal(itemsData.total || 0);
+      setError("");
     } catch (err) {
       setError(humanizeError(err?.message || err));
     } finally {
@@ -765,7 +1018,11 @@ function App() {
       setTimelineData(data);
     } catch (err) {
       setTimelineData(null);
-      setError(humanizeError(err?.message || err));
+      const message = humanizeError(err?.message || err);
+      if (/question or run not found/i.test(message)) {
+        return;
+      }
+      setError(message);
     }
   }
 
@@ -831,17 +1088,19 @@ function App() {
   }
 
   async function handleCreateRun(event) {
-    event.preventDefault();
+    event?.preventDefault?.();
     setBusy(true);
     setError("");
     setNotice("");
     try {
+      const connection = selectedConnection;
       const payload = {
-        provider_id: runForm.provider_id,
-        model_alias: runForm.model_alias,
+        provider_id: connection?.provider_id || runForm.provider_id,
+        model_alias: connection?.model_alias || runForm.model_alias,
+        model_connection_id: connection?.connection_id || runForm.model_connection_id || null,
         modules: runForm.modules.length ? runForm.modules : null,
         smoke: runForm.smoke,
-        timeout: Number(runForm.timeout) || null,
+        timeout: Number(runForm.timeout || connection?.default_timeout) || null,
         concurrency_limit: Number(runForm.concurrency_limit) || 1,
         max_items: runForm.max_items ? Number(runForm.max_items) : null,
       };
@@ -849,6 +1108,10 @@ function App() {
         method: "POST",
         body: JSON.stringify(payload),
       });
+      runRequestSeq.current += 1;
+      setRunItems([]);
+      setRunItemsTotal(0);
+      setTimelineData(null);
       setSelectedRunId(run.run_id);
       setSelectedQuestionId(null);
       setSelectedRun(run);
@@ -872,6 +1135,10 @@ function App() {
         method: "POST",
         body: JSON.stringify({ concurrency_limit: 1, timeout: 30 }),
       });
+      runRequestSeq.current += 1;
+      setRunItems([]);
+      setRunItemsTotal(0);
+      setTimelineData(null);
       setSelectedRunId(retryRun.run_id);
       setSelectedRun(retryRun);
       setNotice(`已基于 ${selectedRunId} 创建失败题重试 run：${retryRun.run_id}`);
@@ -889,16 +1156,177 @@ function App() {
     if (!selectedRunId) return;
     setBusy(true);
     setLoadingReport(true);
+    setError("");
+    setNotice("");
     try {
       await apiFetch(`/api/runs/${selectedRunId}/report`, { method: "POST" });
-      const reportData = await apiFetch(`/api/reports/${selectedRunId}`);
+      const reportData = await fetchReportUntilReady(selectedRunId);
       setReport(reportData);
+      setNotice(`报告已生成：${reportData.report_path}`);
       setView("reports");
     } catch (err) {
       setError(humanizeError(err?.message || err));
     } finally {
       setBusy(false);
       setLoadingReport(false);
+    }
+  }
+
+  async function handlePreviewReport(runId, { generateIfMissing = false } = {}) {
+    if (!runId) return;
+    setBusy(true);
+    setLoadingReport(true);
+    setError("");
+    setNotice("");
+    try {
+      if (generateIfMissing) {
+        await apiFetch(`/api/runs/${runId}/report`, { method: "POST" });
+      }
+      const reportData = await fetchReportUntilReady(runId);
+      setReport(reportData);
+      setSelectedRunId(runId);
+      setView("reports");
+      setNotice(`已加载报告：${reportData.report_path}`);
+      await refreshRun(runId);
+    } catch (err) {
+      setError(humanizeError(err?.message || err));
+    } finally {
+      setBusy(false);
+      setLoadingReport(false);
+    }
+  }
+
+  async function handleConnectionSubmit(event) {
+    event.preventDefault();
+    const normalizedDisplay = connectionForm.display_name.trim();
+    const normalizedVendor = connectionForm.vendor_name.trim();
+    const normalizedBaseUrl = connectionForm.base_url.trim();
+    const normalizedModelName = connectionForm.model_name.trim();
+    const secretConfigured = String(systemPaths?.secret_master_configured || "") === "true";
+    if (!normalizedVendor || !normalizedDisplay || !normalizedModelName) {
+      setError("请填写供应商名称、显示名称和模型名称。");
+      return;
+    }
+    if (connectionForm.auth_scheme !== "none" && connectionForm.api_key.trim() && !secretConfigured) {
+      setError(`后端尚未配置 ${systemPaths?.secret_master_env || "QUESTION_BANK_SECRET_KEY"}，暂时不能安全保存 API Key。`);
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const payload = {
+        connection_id: connectionForm.connection_id || undefined,
+        vendor_name: normalizedVendor,
+        note: connectionForm.note.trim() || undefined,
+        homepage_url: connectionForm.homepage_url.trim() || undefined,
+        display_name: normalizedDisplay,
+        protocol: connectionForm.protocol,
+        base_url: normalizedBaseUrl,
+        auth_scheme: connectionForm.auth_scheme,
+        auth_env: connectionForm.auth_env.trim(),
+        api_key: connectionForm.api_key.trim() || undefined,
+        model_name: normalizedModelName,
+        default_timeout: Number(connectionForm.default_timeout) || 45,
+        default_max_tokens: Number(connectionForm.default_max_tokens) || 512,
+        supports_multi_turn: connectionForm.supports_multi_turn,
+        enabled: connectionForm.enabled,
+        headers_template: JSON.parse(connectionForm.headers_template_text || "{}"),
+        model_lookup_mode: connectionForm.model_lookup_mode,
+        keep_existing_secret: editingConnectionId ? !connectionForm.api_key.trim() : true,
+      };
+      const endpoint = editingConnectionId ? `/api/model-connections/${editingConnectionId}` : "/api/model-connections";
+      const method = editingConnectionId ? "PATCH" : "POST";
+      const saved = await apiFetch(endpoint, { method, body: JSON.stringify(payload) });
+      setNotice(`模型接入已保存：${saved.display_name}`);
+      resetConnectionForm();
+      await refreshProviders();
+      setRunForm((prev) => ({
+        ...prev,
+        model_connection_id: saved.connection_id,
+        provider_id: saved.provider_id,
+        model_alias: saved.model_alias,
+        timeout: saved.default_timeout,
+      }));
+    } catch (err) {
+      setError(humanizeError(err?.message || err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleTestConnection(connectionId) {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await apiFetch(`/api/model-connections/${connectionId}/test`, { method: "POST" });
+      setNotice(`连通性测试通过：${result.model_name}`);
+    } catch (err) {
+      setError(humanizeError(err?.message || err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteRun(run) {
+    const warning = run.run_kind === "base"
+      ? `确认删除 run "${run.run_id}"？这会同时删除该 run 及其 retry 链路、SQLite 记录和运行目录。`
+      : `确认删除 retry run "${run.run_id}"？这会删除该 run 的 SQLite 记录和运行目录，并使 root run 的 canonical/report 失效，需重新生成。`;
+    if (!window.confirm(warning)) {
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await apiFetch(`/api/runs/${run.run_id}`, { method: "DELETE" });
+      if (selectedRunId && result.deleted_run_ids?.includes(selectedRunId)) {
+        setSelectedRunId(null);
+        setSelectedRun(null);
+        setRunItems([]);
+        setReport(null);
+      }
+      setNotice(`已删除 ${result.deleted_run_ids?.length || 1} 个 run`);
+      await refreshRuns();
+    } catch (err) {
+      setError(humanizeError(err?.message || err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteSelectedRuns() {
+    if (!selectedHistoryRunIds.length) {
+      return;
+    }
+    const roots = selectedHistoryRuns.filter((run) => (run.run_kind || "base") === "base").length;
+    const retries = selectedHistoryRunIds.length - roots;
+    const warning = `确认删除所选 ${selectedHistoryRunIds.length} 个 run 吗？其中 base ${roots} 个、retry ${retries} 个。删除会同步清理 SQLite 记录和运行目录。`;
+    if (!window.confirm(warning)) {
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await apiFetch("/api/runs/bulk-delete", {
+        method: "POST",
+        body: JSON.stringify({ run_ids: selectedHistoryRunIds }),
+      });
+      if (selectedRunId && result.deleted_run_ids?.includes(selectedRunId)) {
+        setSelectedRunId(null);
+        setSelectedRun(null);
+        setRunItems([]);
+        setReport(null);
+      }
+      setSelectedHistoryRunIds([]);
+      setNotice(`已删除 ${result.deleted_run_ids?.length || 0} 个 run`);
+      await refreshRuns();
+    } catch (err) {
+      setError(humanizeError(err?.message || err));
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -1045,6 +1473,30 @@ function App() {
     });
   }
 
+  function beginEditConnection(connection) {
+    setEditingConnectionId(connection.connection_id);
+    setShowConnectionForm(true);
+    setConnectionForm({
+      connection_id: connection.connection_id,
+      vendor_name: connection.vendor_name || "",
+      note: connection.note || "",
+      homepage_url: connection.homepage_url || "",
+      display_name: connection.display_name || "",
+      protocol: connection.protocol || "anthropic_compatible",
+      base_url: connection.base_url || "",
+      auth_scheme: connection.auth_scheme || "x_api_key",
+      auth_env: connection.auth_env || "",
+      api_key: "",
+      model_name: connection.model_name || "",
+      default_timeout: connection.default_timeout || 45,
+      default_max_tokens: connection.default_max_tokens || 512,
+      supports_multi_turn: connection.supports_multi_turn !== false,
+      enabled: connection.enabled !== false,
+      headers_template_text: JSON.stringify(connection.headers_template || {}, null, 2),
+      model_lookup_mode: connection.model_lookup_mode || "skip",
+    });
+  }
+
   function resetProviderForm() {
     setEditingProviderId(null);
     setShowProviderForm(false);
@@ -1074,6 +1526,44 @@ function App() {
       supports_multi_turn: true,
       enabled: true,
     }));
+  }
+
+  function resetConnectionForm() {
+    setEditingConnectionId(null);
+    setShowConnectionForm(false);
+    setConnectionForm({
+      connection_id: "",
+      vendor_name: "",
+      note: "",
+      homepage_url: "",
+      display_name: "",
+      protocol: "anthropic_compatible",
+      base_url: "",
+      auth_scheme: "x_api_key",
+      auth_env: "MINIMAX_API_KEY",
+      api_key: "",
+      model_name: "",
+      default_timeout: 45,
+      default_max_tokens: 512,
+      supports_multi_turn: true,
+      enabled: true,
+      headers_template_text: "{}",
+      model_lookup_mode: "skip",
+    });
+  }
+
+  function toggleHistoryRunSelection(runId) {
+    setSelectedHistoryRunIds((prev) => (
+      prev.includes(runId) ? prev.filter((item) => item !== runId) : [...prev, runId]
+    ));
+  }
+
+  function toggleAllHistoryRuns() {
+    if (runs.length && selectedHistoryRunIds.length === runs.length) {
+      setSelectedHistoryRunIds([]);
+      return;
+    }
+    setSelectedHistoryRunIds(runs.map((run) => run.run_id));
   }
 
   async function deleteProvider(providerId) {
@@ -1114,6 +1604,27 @@ function App() {
     }
   }
 
+  async function deleteConnection(connection) {
+    const warning = `确认删除模型接入 "${connection.display_name}"？这会同时移除其底层 Provider / Model 映射，但不会删除已经跑过的历史 run。`;
+    if (!window.confirm(warning)) {
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      await apiFetch(`/api/model-connections/${connection.connection_id}`, { method: "DELETE" });
+      if (runForm.model_connection_id === connection.connection_id) {
+        setRunForm((prev) => ({ ...prev, model_connection_id: "" }));
+      }
+      resetConnectionForm();
+      await refreshProviders();
+    } catch (err) {
+      setError(humanizeError(err?.message || err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function openNewProviderForm() {
     setEditingProviderId(null);
     setShowProviderForm(true);
@@ -1145,6 +1656,11 @@ function App() {
     }));
   }
 
+  function openNewConnectionForm() {
+    resetConnectionForm();
+    setShowConnectionForm(true);
+  }
+
   const failureCounts = useMemo(() => {
     const counter = {};
     runItems.forEach((item) => {
@@ -1159,8 +1675,10 @@ function App() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
+          <div className="brand-mark">∿</div>
           <div className="brand-kicker">LLM Evaluation</div>
           <div className="brand-title">Multi-Model Console</div>
+          <div className="brand-note">Research-grade evaluation cockpit for multi-provider model testing.</div>
         </div>
         <nav className="nav">
           {RUN_VIEWS.map((entry) => (
@@ -1175,20 +1693,39 @@ function App() {
         </nav>
       </aside>
 
-      <main className="content">
-        <header className="hero">
-          <div>
+      <main className="content content-stage">
+        <header className="hero hero-editorial">
+          <div className="hero-copy">
+            <div className="hero-kicker-row">
+              <span className="hero-tag">Active View</span>
+              <span className="hero-tag hero-tag-ghost">{RUN_VIEWS.find((item) => item.key === view)?.label || "-"}</span>
+            </div>
             <div className="hero-title">多模型测评系统</div>
-            <div className="hero-subtitle">支持模型注册、历史兼容、题库浏览、逐题详情和多轮时间线。</div>
-            <div className="hero-endpoint">API: {API_BASE}</div>
+            <div className="hero-subtitle">围绕模型接入、评测执行、逐题诊断与报告可视化构建的一体化评测工作台。</div>
+            <div className="hero-endpoint">Endpoint · {API_BASE}</div>
           </div>
-          <div className="hero-actions">
-            <button className="action-button" onClick={handleRetryFailures} disabled={!selectedRunId || busy}>
-              重试失败题
-            </button>
-            <button className="action-button secondary" onClick={handleGenerateReport} disabled={!selectedRunId || busy}>
-              生成报告
-            </button>
+          <div className="hero-side">
+            <div className="hero-status-card">
+              <div className="hero-status-head">
+                <span className="hero-status-label">Current Run</span>
+                <span className={`status-pill ${runIsActive ? "status-pill-neutral" : "status-pill-ok"}`}>
+                  {selectedRun?.execution_status || selectedRun?.status || "idle"}
+                </span>
+              </div>
+              <div className="hero-status-value mono">{selectedRunId || "未选择运行"}</div>
+              <div className="hero-status-meta">
+                Processed {selectedRunCounts.processed} / {selectedRunCounts.total} ·
+                Succeeded {selectedRunCounts.succeeded} · Failed {selectedRunCounts.failed}
+              </div>
+            </div>
+            <div className="hero-actions">
+              <button className="action-button" onClick={handleRetryFailures} disabled={!selectedRunId || busy}>
+                重试失败题
+              </button>
+              <button className="action-button secondary" onClick={handleGenerateReport} disabled={!selectedRunId || busy}>
+                生成报告
+              </button>
+            </div>
           </div>
         </header>
 
@@ -1199,71 +1736,66 @@ function App() {
           <ScoreCard title="Overall" value={selectedRunSummary.overall_macro_score} tone="neutral" />
         </section>
 
-        {error ? <div className="error-banner">{error}</div> : null}
+        {visibleError ? <div className="error-banner">{visibleError}</div> : null}
         {notice ? <div className="notice-banner">{notice}</div> : null}
 
         {view === "create" ? (
           <section className="panel">
-            <SectionTitle title="创建评测任务" meta="支持旧 run 和新模型同屏管理" />
-            {selectedProvider ? (
+            <SectionTitle title="创建评测任务" meta="直接基于模型接入实例发起评测" />
+            {selectedConnection ? (
               <div className="hero-subgrid">
                 <InfoBanner
-                  tone={selectedProvider.configured ? "ok" : "warn"}
-                  title={`当前 Provider: ${selectedProvider.display_name}`}
+                  tone={selectedConnection.configured ? "ok" : "warn"}
+                  title={`当前模型接入: ${selectedConnection.display_name}`}
                   body={
                     <>
-                      <div>协议：{selectedProvider.protocol}</div>
-                      <div>Base URL：{selectedProvider.base_url || "-"}</div>
-                      <div>所需 Key：{selectedProvider.auth_env || "无需密钥"}</div>
+                      <div>供应商：{selectedConnection.vendor_name}</div>
+                      <div>协议：{selectedConnection.protocol}</div>
+                      <div>Base URL：{selectedConnection.base_url || "-"}</div>
+                      <div>模型名：{selectedConnection.model_name || "-"}</div>
+                      <div>所需 Key：{selectedConnection.auth_env || "已内置或无需密钥"}</div>
                     </>
                   }
                 />
                 <InfoBanner
-                  tone={selectedProvider.configured ? "neutral" : "warn"}
-                  title={selectedProvider.configured ? "凭据已就绪" : "凭据尚未配置"}
+                  tone={selectedConnection.configured ? "neutral" : "warn"}
+                  title={selectedConnection.configured ? "凭据已就绪" : "凭据尚未配置"}
                   body={
-                    selectedProvider.configured
+                    selectedConnection.configured
                       ? "当前后端环境变量已经可用，可以直接发起评测。"
-                      : `请先在后端环境中设置 ${selectedProvider.auth_env || "对应环境变量"}，否则模型请求会失败。`
+                      : `请先在模型接入中配置 API Key，或在后端环境中设置 ${selectedConnection.auth_env || "对应环境变量"}。`
                   }
                 />
               </div>
             ) : null}
             <form className="form-grid wide" onSubmit={handleCreateRun}>
               <label>
-                Provider
+                模型接入实例
                 <select
-                  value={runForm.provider_id}
+                  value={runForm.model_connection_id}
                   onChange={(event) => {
-                    const nextProviderId = event.target.value;
-                    const firstModel = models.find((model) => model.provider_id === nextProviderId && model.enabled !== false);
+                    const nextConnectionId = event.target.value;
+                    const nextConnection = connections.find((item) => item.connection_id === nextConnectionId);
                     setRunForm((prev) => ({
                       ...prev,
-                      provider_id: nextProviderId,
-                      model_alias: firstModel?.model_alias || "",
+                      model_connection_id: nextConnectionId,
+                      provider_id: nextConnection?.provider_id || "",
+                      model_alias: nextConnection?.model_alias || "",
+                      timeout: nextConnection?.default_timeout || prev.timeout,
                     }));
                   }}
                 >
-                  {providers.map((provider) => (
-                    <option key={provider.provider_id} value={provider.provider_id}>
-                      {provider.display_name} {provider.configured ? "" : "(未配置密钥)"}
+                  {!connections.length ? <option value="">当前没有可用模型接入</option> : null}
+                  {connections.map((connection) => (
+                    <option key={connection.connection_id} value={connection.connection_id}>
+                      {connection.display_name} / {connection.vendor_name} {connection.configured ? "" : "(未配置密钥)"}
                     </option>
                   ))}
                 </select>
               </label>
               <label>
-                Model Alias
-                <select
-                  value={runForm.model_alias}
-                  onChange={(event) => setRunForm((prev) => ({ ...prev, model_alias: event.target.value }))}
-                >
-                  {!modelsForProvider.length ? <option value="">当前 Provider 下没有可用模型</option> : null}
-                  {modelsForProvider.map((model) => (
-                    <option key={model.model_alias} value={model.model_alias}>
-                      {model.display_name}
-                    </option>
-                  ))}
-                </select>
+                模型显示名
+                <input value={selectedConnection?.display_name || "-"} readOnly />
               </label>
               <label>
                 Timeout
@@ -1290,6 +1822,9 @@ function App() {
               <button className="action-button" type="button" onClick={handleCreateRun} disabled={busy}>
                 {busy ? "启动中..." : "启动评测"}
               </button>
+                <button className="action-button secondary" type="button" onClick={() => setView("models")}>
+                  前往模型接入
+                </button>
             </div>
           </section>
         ) : null}
@@ -1303,21 +1838,22 @@ function App() {
                 <span>Status: {selectedRun?.execution_status || selectedRun?.status || "-"}</span>
                 <span>Provider: {selectedRun?.provider_id || "-"}</span>
                 <span>Model: {selectedRun?.model_alias || selectedRun?.model_name || "-"}</span>
-                <span>Completed: {selectedRun?.progress?.items_completed ?? selectedRun?.totals?.items_completed ?? 0} / {selectedRun?.progress?.items_total ?? selectedRun?.totals?.items_total ?? 0}</span>
-                <span>Failed: {selectedRun?.progress?.items_failed ?? selectedRun?.totals?.items_failed ?? 0}</span>
+                <span>Processed: {selectedRunCounts.processed} / {selectedRunCounts.total}</span>
+                <span>Succeeded: {selectedRunCounts.succeeded}</span>
+                <span>Failed: {selectedRunCounts.failed}</span>
               </div>
               <div className="progress-bar">
                 <div
                   className="progress-fill"
                   style={{
-                    width: `${selectedRun?.progress?.items_total ? (selectedRun.progress.items_completed / Math.max(1, selectedRun.progress.items_total)) * 100 : 0}%`,
+                    width: `${selectedRunCounts.total ? (selectedRunCounts.processed / Math.max(1, selectedRunCounts.total)) * 100 : 0}%`,
                   }}
                 />
               </div>
               <div className="progress-caption">
                 <span>
-                  {selectedRun?.progress?.items_completed ?? 0} / {selectedRun?.progress?.items_total ?? 0}
-                  {" "}已处理
+                  {selectedRunCounts.processed} / {selectedRunCounts.total}
+                  {" "}已处理，成功 {selectedRunCounts.succeeded}，失败 {selectedRunCounts.failed}
                 </span>
                 <span>
                   {selectedRun?.execution_status === "completed"
@@ -1581,122 +2117,268 @@ function App() {
           </section>
         ) : null}
 
-        {view === "models" ? (
+{view === "models" ? (
           <section className="panel">
-            <SectionTitle title="模型管理" meta="非密钥配置保存到项目文件，密钥仍只走环境变量" />
+            <SectionTitle title="模型接入" meta="主路径按接入实例配置；底层 Provider / Model 抽象收纳到高级模式" />
             <PathList title="配置文件位置" paths={{ providers_config_path: systemPaths?.providers_config_path }} />
             {loadingProviders ? <div className="muted-text">正在加载模型配置…</div> : null}
-            <div className="management-grid management-grid-compact">
-              <div className="management-column">
-                <div className="detail-card management-surface">
-                  <SectionTitle title="Provider 管理" meta="协议、URL、认证环境变量" />
-                  <div className="mini-stat-grid compact-stats">
-                    <SummaryMiniCard label="Provider 总数" value={providerSummary.total} />
-                    <SummaryMiniCard label="已启用" value={providerSummary.enabled} />
-                    <SummaryMiniCard label="已配置密钥" value={providerSummary.configured} />
+            <div className="detail-card connection-hero-card">
+              <div className="mini-stat-grid compact-stats">
+                <SummaryMiniCard label="接入实例总数" value={connectionSummary.total} />
+                <SummaryMiniCard label="已启用" value={connectionSummary.enabled} />
+                <SummaryMiniCard label="已配置密钥" value={connectionSummary.configured} />
+              </div>
+              <div className="toolbar-row compact-toolbar">
+                <button className="action-button compact-action" type="button" onClick={openNewConnectionForm}>
+                  新增模型接入
+                </button>
+                <button className="action-button secondary compact-action" type="button" onClick={refreshProviders}>
+                  刷新
+                </button>
+                <button className="action-button secondary compact-action" type="button" onClick={() => setShowAdvancedConfig((prev) => !prev)}>
+                  {showAdvancedConfig ? "收起高级模式" : "展开高级模式"}
+                </button>
+              </div>
+              <InfoBanner
+                tone={String(systemPaths?.secret_master_configured || "") === "true" ? "ok" : "warn"}
+                title={String(systemPaths?.secret_master_configured || "") === "true" ? "API Key 可安全持久化" : "后端尚未配置主密钥"}
+                body={
+                  String(systemPaths?.secret_master_configured || "") === "true"
+                    ? `前端填写的 API Key 会加密后存入 SQLite，主密钥环境变量为 ${systemPaths?.secret_master_env || "QUESTION_BANK_SECRET_KEY"}。`
+                    : `若要从前端保存真实 API Key，请先在后端环境中设置 ${systemPaths?.secret_master_env || "QUESTION_BANK_SECRET_KEY"}。`
+                }
+              />
+            </div>
+
+            <div className="connection-grid">
+              {connections.length ? connections.map((connection) => (
+                <div className="connection-card" key={connection.connection_id}>
+                  <div className="connection-card-head">
+                    <div>
+                      <div className="config-row-title">{connection.display_name}</div>
+                      <div className="config-row-subtitle">{connection.vendor_name} / {connection.model_name}</div>
+                    </div>
+                    <StatusPill configured={connection.configured} envName={connection.auth_env || "内置密钥"} />
                   </div>
-                  <div className="toolbar-row compact-toolbar">
-                    <button className="action-button compact-action" type="button" onClick={openNewProviderForm}>
-                      新增 Provider
+                  <div className="connection-meta-grid">
+                    <div><span>URL</span><strong title={connection.base_url}>{briefText(connection.base_url, 48)}</strong></div>
+                    <div><span>协议</span><strong>{connection.protocol}</strong></div>
+                    <div><span>模型</span><strong>{connection.model_name}</strong></div>
+                    <div><span>超时</span><strong>{connection.default_timeout}s</strong></div>
+                  </div>
+                  <div className="config-chip-row">
+                    <span className="chip">{connection.enabled !== false ? "enabled" : "disabled"}</span>
+                    <span className={`chip ${connection.supports_multi_turn ? "chip-ok" : "chip-soft"}`}>{connection.supports_multi_turn ? "multi-turn" : "single-turn"}</span>
+                    {connection.note ? <span className="chip chip-soft">{briefText(connection.note, 24)}</span> : null}
+                  </div>
+                  <div className="connection-card-actions">
+                    <button className="mini-button" type="button" onClick={() => {
+                      setRunForm((prev) => ({
+                        ...prev,
+                        model_connection_id: connection.connection_id,
+                        provider_id: connection.provider_id,
+                        model_alias: connection.model_alias,
+                        timeout: connection.default_timeout || prev.timeout,
+                      }));
+                      setView("create");
+                    }}>
+                      用此评测
                     </button>
-                    <button className="action-button secondary compact-action" type="button" onClick={refreshProviders}>
-                      刷新
-                    </button>
+                    <button className="mini-button" type="button" onClick={() => handleTestConnection(connection.connection_id)}>测试连通性</button>
+                    <button className="mini-button" type="button" onClick={() => beginEditConnection(connection)}>编辑</button>
+                    <button className="mini-button danger" type="button" onClick={() => deleteConnection(connection)}>删除</button>
                   </div>
-                  <div className="compact-hint-row">
-                    <span>密钥不会写入配置文件，只会读取后端环境变量。</span>
+                </div>
+              )) : (
+                <EmptyState
+                  title="还没有模型接入实例"
+                  description="推荐先创建一个 MiniMax 或 OpenAI-compatible 接入实例，再回到运行创建页发起评测。"
+                  actionLabel="立即新增"
+                  onAction={openNewConnectionForm}
+                />
+              )}
+            </div>
+
+            {showAdvancedConfig ? (
+              <div className="management-grid management-grid-compact advanced-stack">
+                <div className="management-column">
+                  <div className="detail-card management-surface">
+                    <SectionTitle title="高级模式 / Provider" meta="协议、URL 与认证环境变量" />
+                    <div className="mini-stat-grid compact-stats">
+                      <SummaryMiniCard label="Provider 总数" value={providerSummary.total} />
+                      <SummaryMiniCard label="已启用" value={providerSummary.enabled} />
+                      <SummaryMiniCard label="已配置密钥" value={providerSummary.configured} />
+                    </div>
+                    <div className="toolbar-row compact-toolbar">
+                      <button className="action-button compact-action" type="button" onClick={openNewProviderForm}>新增 Provider</button>
+                    </div>
+                    <div className="config-list advanced-config-list">
+                      {providers.map((provider) => {
+                        const hasLinkedModel = models.some((model) => model.provider_id === provider.provider_id);
+                        return (
+                          <div className="config-row" key={provider.provider_id} onClick={() => beginEditProvider(provider)}>
+                            <div className="config-row-main">
+                              <div className="config-row-title">{provider.display_name}</div>
+                              <div className="config-row-subtitle mono">{provider.provider_id}</div>
+                              <div className="config-chip-row">
+                                <span className="chip">{provider.protocol}</span>
+                                <span className="chip chip-soft" title={provider.base_url}>{briefText(provider.base_url, 52)}</span>
+                              </div>
+                            </div>
+                            <div className="config-row-actions">
+                              <button className="mini-button" type="button" onClick={(event) => { event.stopPropagation(); beginEditProvider(provider); }}>编辑</button>
+                              <button className="mini-button danger" type="button" disabled={hasLinkedModel} onClick={(event) => { event.stopPropagation(); deleteProvider(provider.provider_id); }}>删除</button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <div className="config-list">
-                    {providers.map((provider) => {
-                      const hasLinkedModel = models.some((model) => model.provider_id === provider.provider_id);
-                      return (
-                        <div className="config-row" key={provider.provider_id} onClick={() => beginEditProvider(provider)}>
+                </div>
+                <div className="management-column">
+                  <div className="detail-card management-surface">
+                    <SectionTitle title="高级模式 / Model Alias" meta="底层运行映射" />
+                    <div className="mini-stat-grid compact-stats">
+                      <SummaryMiniCard label="Model 总数" value={modelSummary.total} />
+                      <SummaryMiniCard label="已启用" value={modelSummary.enabled} />
+                      <SummaryMiniCard label="支持多轮" value={modelSummary.multiTurn} />
+                    </div>
+                    <div className="toolbar-row compact-toolbar">
+                      <button className="action-button compact-action" type="button" onClick={openNewModelForm}>新增 Model Alias</button>
+                    </div>
+                    <div className="config-list advanced-config-list">
+                      {models.map((model) => (
+                        <div className="config-row" key={model.model_alias} onClick={() => beginEditModel(model)}>
                           <div className="config-row-main">
-                            <div className="config-row-title">{provider.display_name}</div>
-                            <div className="config-row-subtitle mono">{provider.provider_id}</div>
+                            <div className="config-row-title">{model.display_name || model.model_alias}</div>
+                            <div className="config-row-subtitle mono">{model.model_alias}</div>
                             <div className="config-chip-row">
-                              <span className="chip">{provider.protocol}</span>
-                              <span className="chip chip-soft" title={provider.base_url}>{briefText(provider.base_url, 52)}</span>
-                              <span className="chip chip-soft mono" title={provider.auth_env || "无需密钥"}>{provider.auth_env || "无需密钥"}</span>
-                              <StatusPill configured={provider.configured} envName={provider.auth_env} />
-                              <span className={`chip ${provider.enabled !== false ? "chip-ok" : "chip-failed"}`}>{provider.enabled !== false ? "enabled" : "disabled"}</span>
+                              <span className="chip chip-soft mono">{model.provider_id}</span>
+                              <span className="chip chip-soft">{briefText(model.model_name, 42)}</span>
                             </div>
                           </div>
                           <div className="config-row-actions">
-                            <button className="mini-button" type="button" onClick={(event) => { event.stopPropagation(); beginEditProvider(provider); }}>编辑</button>
-                            <button
-                              className="mini-button danger"
-                              type="button"
-                              disabled={hasLinkedModel}
-                              title={hasLinkedModel ? "请先删除或迁移该 Provider 下的 Model Alias" : "删除 Provider"}
-                              onClick={(event) => { event.stopPropagation(); deleteProvider(provider.provider_id); }}
-                            >
-                              删除
-                            </button>
+                            <button className="mini-button" type="button" onClick={(event) => { event.stopPropagation(); beginEditModel(model); }}>编辑</button>
+                            <button className="mini-button danger" type="button" onClick={(event) => { event.stopPropagation(); deleteModel(model.model_alias); }}>删除</button>
                           </div>
                         </div>
-                      );
-                    })}
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
+            ) : null}
 
-              <div className="management-column">
-                <div className="detail-card management-surface">
-                  <SectionTitle title="Model Alias 管理" meta="内部别名、真实 model_name 与默认参数" />
-                  <div className="mini-stat-grid compact-stats">
-                    <SummaryMiniCard label="Model 总数" value={modelSummary.total} />
-                    <SummaryMiniCard label="已启用" value={modelSummary.enabled} />
-                    <SummaryMiniCard label="支持多轮" value={modelSummary.multiTurn} />
-                  </div>
-                  <div className="toolbar-row compact-toolbar">
-                    <button className="action-button compact-action" type="button" onClick={openNewModelForm}>
-                      新增 Model Alias
-                    </button>
-                    <button className="action-button secondary compact-action" type="button" onClick={refreshProviders}>
-                      刷新
-                    </button>
-                  </div>
-                  <div className="compact-hint-row">
-                    <span>建议先选 Provider，再填写稳定英文 alias；真实模型名填在 model_name。</span>
-                  </div>
-                  <div className="config-list">
-                    {models.length ? models.map((model) => (
-                      <div className="config-row" key={model.model_alias} onClick={() => beginEditModel(model)}>
-                        <div className="config-row-main">
-                          <div className="config-row-title">{model.display_name || model.model_alias}</div>
-                          <div className="config-row-subtitle mono">{model.model_alias}</div>
-                          <div className="config-chip-row">
-                            <span className="chip chip-soft mono" title={model.provider_id}>{model.provider_id}</span>
-                            <span className="chip chip-soft" title={model.model_name}>{briefText(model.model_name, 44)}</span>
-                            <span className="chip">timeout {model.default_timeout}s</span>
-                            <span className="chip">{model.default_max_tokens} tokens</span>
-                            <span className={`chip ${model.supports_multi_turn ? "chip-ok" : "chip-soft"}`}>{model.supports_multi_turn ? "multi-turn" : "single-turn"}</span>
-                            <span className={`chip ${model.enabled !== false ? "chip-ok" : "chip-failed"}`}>{model.enabled !== false ? "enabled" : "disabled"}</span>
-                          </div>
-                        </div>
-                        <div className="config-row-actions">
-                          <button className="mini-button" type="button" onClick={(event) => { event.stopPropagation(); beginEditModel(model); }}>编辑</button>
-                          <button className="mini-button danger" type="button" onClick={(event) => { event.stopPropagation(); deleteModel(model.model_alias); }}>删除</button>
-                        </div>
-                      </div>
-                    )) : (
-                      <EmptyState
-                        title="还没有 Model Alias"
-                        description="点击“新增 Model Alias”创建第一个模型映射。"
-                        actionLabel="立即新增"
-                        onAction={openNewModelForm}
-                      />
-                    )}
-                  </div>
+            <ModalDialog
+              open={showConnectionForm}
+              title={editingConnectionId ? "编辑模型接入" : "新增模型接入"}
+              subtitle={editingConnectionId || "像 Trae / cc-switch 一样，按单个模型接入实例配置"}
+              onClose={busy ? undefined : resetConnectionForm}
+            >
+              <form className="form-stack modal-form" onSubmit={handleConnectionSubmit}>
+                <div className="form-grid compact-form-grid">
+                  <label>
+                    供应商名称
+                    <input value={connectionForm.vendor_name} onChange={(event) => setConnectionForm((prev) => ({ ...prev, vendor_name: event.target.value }))} placeholder="MiniMax" />
+                  </label>
+                  <label>
+                    备注
+                    <input value={connectionForm.note} onChange={(event) => setConnectionForm((prev) => ({ ...prev, note: event.target.value }))} placeholder="例如：公司专用账号" />
+                  </label>
+                  <label>
+                    官网链接
+                    <input value={connectionForm.homepage_url} onChange={(event) => setConnectionForm((prev) => ({ ...prev, homepage_url: event.target.value }))} placeholder="https://platform.minimaxi.com" />
+                  </label>
+                  <label>
+                    显示名称
+                    <input value={connectionForm.display_name} onChange={(event) => setConnectionForm((prev) => ({ ...prev, display_name: event.target.value }))} placeholder="MiniMax-M2.7" />
+                  </label>
                 </div>
-              </div>
-            </div>
+                <div className="modal-section-head">请求配置</div>
+                <div className="form-grid compact-form-grid">
+                  <label>
+                    请求地址
+                    <input value={connectionForm.base_url} onChange={(event) => setConnectionForm((prev) => ({ ...prev, base_url: event.target.value }))} placeholder="https://api.minimax.chat/anthropic/v1" />
+                  </label>
+                  <label>
+                    API 格式
+                    <select value={connectionForm.protocol} onChange={(event) => setConnectionForm((prev) => ({ ...prev, protocol: event.target.value }))}>
+                      {PROTOCOL_OPTIONS.filter((item) => item.value !== "mock").map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    认证方式
+                    <select value={connectionForm.auth_scheme} onChange={(event) => setConnectionForm((prev) => ({ ...prev, auth_scheme: event.target.value }))}>
+                      {AUTH_SCHEME_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    认证字段环境名
+                    <input value={connectionForm.auth_env} onChange={(event) => setConnectionForm((prev) => ({ ...prev, auth_env: event.target.value }))} placeholder="MINIMAX_API_KEY" />
+                  </label>
+                </div>
+                <InfoBanner
+                  tone="neutral"
+                  title="API Key 录入"
+                  body={String(systemPaths?.secret_master_configured || "") === "true"
+                    ? "这里可以直接填写真实 API Key，后端会加密后存入 SQLite。留空则沿用已有密钥。"
+                    : `当前后端未设置 ${systemPaths?.secret_master_env || "QUESTION_BANK_SECRET_KEY"}，因此只能保存环境变量名，不能安全保存真实密钥。`}
+                />
+                <label className="stacked-label">
+                  API Key
+                  <input type="password" value={connectionForm.api_key} onChange={(event) => setConnectionForm((prev) => ({ ...prev, api_key: event.target.value }))} placeholder={editingConnectionId ? "留空表示保持原密钥" : "输入真实 API Key"} />
+                </label>
+                <div className="modal-section-head">模型映射</div>
+                <div className="form-grid compact-form-grid">
+                  <label>
+                    真实请求模型名
+                    <input value={connectionForm.model_name} onChange={(event) => setConnectionForm((prev) => ({ ...prev, model_name: event.target.value }))} placeholder="MiniMax-M2.7" />
+                  </label>
+                  <label>
+                    model_lookup_mode
+                    <select value={connectionForm.model_lookup_mode} onChange={(event) => setConnectionForm((prev) => ({ ...prev, model_lookup_mode: event.target.value }))}>
+                      {MODEL_LOOKUP_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    default_timeout
+                    <input type="number" value={connectionForm.default_timeout} onChange={(event) => setConnectionForm((prev) => ({ ...prev, default_timeout: event.target.value }))} />
+                  </label>
+                  <label>
+                    default_max_tokens
+                    <input type="number" value={connectionForm.default_max_tokens} onChange={(event) => setConnectionForm((prev) => ({ ...prev, default_max_tokens: event.target.value }))} />
+                  </label>
+                </div>
+                <div className="form-grid compact-form-grid checkbox-grid">
+                  <label className="checkbox-label compact-checkbox">
+                    <input type="checkbox" checked={connectionForm.supports_multi_turn} onChange={(event) => setConnectionForm((prev) => ({ ...prev, supports_multi_turn: event.target.checked }))} />
+                    supports_multi_turn
+                  </label>
+                  <label className="checkbox-label compact-checkbox">
+                    <input type="checkbox" checked={connectionForm.enabled} onChange={(event) => setConnectionForm((prev) => ({ ...prev, enabled: event.target.checked }))} />
+                    enabled
+                  </label>
+                </div>
+                <details className="advanced-details">
+                  <summary>高级选项</summary>
+                  <div className="modal-section-head">高级请求头</div>
+                  <label className="stacked-label">
+                    headers_template JSON
+                    <textarea value={connectionForm.headers_template_text} onChange={(event) => setConnectionForm((prev) => ({ ...prev, headers_template_text: event.target.value }))} rows={6} />
+                  </label>
+                </details>
+                <div className="form-actions compact-form-actions">
+                  <button className="action-button compact-action" type="submit" disabled={busy}>{editingConnectionId ? "更新模型接入" : "保存模型接入"}</button>
+                  {editingConnectionId ? <button className="action-button secondary compact-action" type="button" onClick={() => handleTestConnection(editingConnectionId)} disabled={busy}>测试连通性</button> : null}
+                  <button className="action-button secondary compact-action" type="button" onClick={resetConnectionForm}>取消</button>
+                </div>
+              </form>
+            </ModalDialog>
 
             <ModalDialog
               open={showProviderForm}
               title={editingProviderId ? `编辑 Provider` : "新增 Provider"}
-              subtitle={editingProviderId || "配置协议、URL 与认证环境变量"}
+              subtitle={editingProviderId || "高级模式：配置底层协议、URL 与认证环境变量"}
               onClose={busy ? undefined : resetProviderForm}
             >
               <form className="form-stack modal-form" onSubmit={handleProviderSubmit}>
@@ -1721,11 +2403,6 @@ function App() {
                   </label>
                 </div>
                 <div className="modal-section-head">认证信息</div>
-                <InfoBanner
-                  tone={providerForm.auth_scheme === "none" ? "neutral" : "warn"}
-                  title={providerForm.auth_scheme === "none" ? "当前 Provider 不需要密钥" : `请在后端环境中配置 ${providerForm.auth_env || "对应环境变量"}`}
-                  body={providerForm.auth_scheme === "none" ? "例如 mock provider 可以不依赖认证。" : "这里填写的是环境变量名，不是明文 API Key。"}
-                />
                 <div className="form-grid compact-form-grid">
                   <label>
                     auth_scheme
@@ -1748,7 +2425,6 @@ function App() {
                     enabled
                   </label>
                 </div>
-                <div className="modal-section-head">高级请求头</div>
                 <label className="stacked-label">
                   headers_template JSON
                   <textarea value={providerForm.headers_template_text} onChange={(event) => setProviderForm((prev) => ({ ...prev, headers_template_text: event.target.value }))} rows={6} />
@@ -1763,26 +2439,14 @@ function App() {
             <ModalDialog
               open={showModelForm}
               title={editingModelAlias ? "编辑 Model Alias" : "新增 Model Alias"}
-              subtitle={editingModelAlias || "为 Provider 绑定可复用的模型别名"}
+              subtitle={editingModelAlias || "高级模式：底层别名与真实模型映射"}
               onClose={busy ? undefined : resetModelForm}
             >
               <form className="form-stack modal-form" onSubmit={handleModelSubmit}>
                 <div className="form-grid compact-form-grid">
                   <label>
                     model_alias
-                    <input
-                      value={modelForm.model_alias}
-                      onChange={(event) => setModelForm((prev) => ({ ...prev, model_alias: event.target.value }))}
-                      onBlur={() => {
-                        if (!modelForm.model_alias.trim()) {
-                          const nextAlias = slugifyAlias(modelForm.model_name || modelForm.display_name);
-                          if (nextAlias) {
-                            setModelForm((prev) => ({ ...prev, model_alias: nextAlias }));
-                          }
-                        }
-                      }}
-                      placeholder="例如 minimax_m2_7"
-                    />
+                    <input value={modelForm.model_alias} onChange={(event) => setModelForm((prev) => ({ ...prev, model_alias: event.target.value }))} />
                   </label>
                   <label>
                     provider_id
@@ -1796,11 +2460,7 @@ function App() {
                   </label>
                   <label>
                     model_name
-                    <input
-                      value={modelForm.model_name}
-                      onChange={(event) => setModelForm((prev) => ({ ...prev, model_name: event.target.value }))}
-                      placeholder="例如 MiniMax-M2.7"
-                    />
+                    <input value={modelForm.model_name} onChange={(event) => setModelForm((prev) => ({ ...prev, model_name: event.target.value }))} />
                   </label>
                   <label>
                     default_timeout
@@ -1810,11 +2470,6 @@ function App() {
                     default_max_tokens
                     <input type="number" value={modelForm.default_max_tokens} onChange={(event) => setModelForm((prev) => ({ ...prev, default_max_tokens: event.target.value }))} />
                   </label>
-                </div>
-                <div className="compact-meta-panel">
-                  <div className="compact-meta-line"><span>绑定 Provider</span><strong>{selectedModelProvider?.display_name || modelForm.provider_id || "-"}</strong></div>
-                  <div className="compact-meta-line"><span>所需 Key</span><code>{selectedModelProvider?.auth_env || "无需密钥"}</code></div>
-                  <div className="compact-meta-line"><span>当前状态</span><strong>{selectedModelProvider?.configured ? "环境已配置" : "环境未配置"}</strong></div>
                 </div>
                 <div className="form-grid compact-form-grid checkbox-grid">
                   <label className="checkbox-label compact-checkbox">
@@ -1836,84 +2491,234 @@ function App() {
         ) : null}
 
         {view === "history" ? (
-          <section className="panel">
+          <section className="panel history-panel">
             <SectionTitle title="历史 Runs" meta={`共 ${runs.length} 条`} />
-            <PathList title="历史运行目录" paths={{ evaluation_runs_root: systemPaths?.evaluation_runs_root }} />
-            <div className="muted-text">评测结果默认保存在 <code>manifests/evaluation_runs/&lt;run_id&gt;/</code>，正式题库来自 <code>final_bank_specs/generated/final_bank_items.jsonl</code>。</div>
-            <div className="table-shell">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Run ID</th>
-                    <th>Kind</th>
-                    <th>Provider</th>
-                    <th>Model</th>
-                    <th>Status</th>
-                    <th>Completed / Total</th>
-                    <th>Report</th>
-                    <th>Canonical</th>
-                    <th>路径</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {runs.map((run) => (
-                    <tr
-                      key={run.run_id}
-                      onClick={() => {
-                        setSelectedRunId(run.run_id);
-                        setSelectedQuestionId(null);
-                        refreshRun(run.run_id);
-                      }}
-                    >
-                      <td className="mono">{run.run_id}</td>
-                      <td>{run.run_kind || "base"}</td>
-                      <td>{run.provider_id || "-"}</td>
-                      <td>{run.model_alias || run.model_name || "-"}</td>
-                      <td>{run.execution_status || run.status || "-"}</td>
-                      <td>{run.totals?.items_completed ?? 0} / {run.totals?.items_total ?? 0}</td>
-                      <td><RunArtifactStatus ready={run.report_ready} label="报告" /></td>
-                      <td><RunArtifactStatus ready={run.canonical_ready} label="Canonical" /></td>
-                      <td><CopyButton value={run.run_dir} label="复制目录" /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {selectedRun ? (
-              <div className="detail-card inline-detail-card">
-                <SectionTitle title={`Run 产物: ${selectedRun.run_id}`} />
-                <PathList
-                  title="文件路径"
-                  paths={{
-                    run_dir: selectedRun.run_dir,
-                    evaluation_run_path: selectedRun.evaluation_run_path,
-                    item_scores_path: selectedRun.item_scores_path,
-                    summary_path: selectedRun.summary_path,
-                    canonical_summary_path: selectedRun.canonical_summary_path,
-                    report_path: selectedRun.report_path,
-                  }}
-                />
+            <div className="history-hero">
+              <div className="detail-card history-hero-card">
+                <PathList title="历史运行目录" paths={{ evaluation_runs_root: systemPaths?.evaluation_runs_root }} />
+                <div className="muted-text">评测结果默认保存在 <code>manifests/evaluation_runs/&lt;run_id&gt;/</code>，正式题库来自 <code>final_bank_specs/generated/final_bank_items.jsonl</code>。</div>
               </div>
-            ) : null}
+              <div className="mini-stat-grid history-stat-grid">
+                <SummaryMiniCard label="总 Runs" value={historySummary.total} />
+                <SummaryMiniCard label="报告就绪" value={historySummary.reportReady} />
+                <SummaryMiniCard label="Retry Runs" value={historySummary.retry} />
+                <SummaryMiniCard label="已选择" value={selectedHistoryRunIds.length} />
+              </div>
+            </div>
+
+            <div className="history-toolbar">
+              <div className="history-toolbar-group">
+                <button className="mini-button" type="button" onClick={toggleAllHistoryRuns} disabled={!runs.length}>
+                  {runs.length && selectedHistoryRunIds.length === runs.length ? "取消全选" : "全选当前列表"}
+                </button>
+                <button className="mini-button" type="button" onClick={() => setSelectedHistoryRunIds([])} disabled={!selectedHistoryRunIds.length}>
+                  清空选择
+                </button>
+              </div>
+              <div className="history-toolbar-group">
+                <button
+                  className="mini-button"
+                  type="button"
+                  disabled={!selectedRunId}
+                  onClick={() => handlePreviewReport(selectedRunId, { generateIfMissing: !selectedRun?.report_ready })}
+                >
+                  预览当前报告
+                </button>
+                <button className="mini-button danger" type="button" disabled={!selectedHistoryRunIds.length} onClick={deleteSelectedRuns}>
+                  删除所选 {selectedHistoryRunIds.length ? `(${selectedHistoryRunIds.length})` : ""}
+                </button>
+              </div>
+            </div>
+
+            <div className="history-layout">
+              <div className="detail-card history-table-card">
+                <SectionTitle title="运行中心" meta="支持多选删除、报告预览和路径复制" />
+                <div className="table-shell history-table-shell">
+                  <table className="data-table history-table">
+                    <thead>
+                      <tr>
+                        <th className="check-col">
+                          <input
+                            type="checkbox"
+                            checked={runs.length > 0 && selectedHistoryRunIds.length === runs.length}
+                            onChange={toggleAllHistoryRuns}
+                            aria-label="全选 runs"
+                          />
+                        </th>
+                        <th>Run ID</th>
+                        <th>Kind</th>
+                        <th>Provider</th>
+                        <th>Model</th>
+                        <th>Status</th>
+                        <th>Processed / Total</th>
+                        <th>Succeeded / Failed</th>
+                        <th>Report</th>
+                        <th>Canonical</th>
+                        <th>路径</th>
+                        <th>操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {runs.map((run) => (
+                        <tr
+                          key={run.run_id}
+                          className={selectedRunId === run.run_id ? "row-active" : ""}
+                          onClick={() => {
+                            setSelectedRunId(run.run_id);
+                            setSelectedQuestionId(null);
+                            refreshRun(run.run_id);
+                          }}
+                        >
+                          <td className="check-col" onClick={(event) => event.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={historySelection.has(run.run_id)}
+                              onChange={() => toggleHistoryRunSelection(run.run_id)}
+                              aria-label={`选择 ${run.run_id}`}
+                            />
+                          </td>
+                          <td className="mono data-cell-wrap">{run.run_id}</td>
+                          <td className="data-cell-wrap">{run.run_kind || "base"}</td>
+                          <td className="data-cell-wrap">{run.provider_id || "-"}</td>
+                          <td className="data-cell-wrap">{run.model_alias || run.model_name || "-"}</td>
+                          <td className="data-cell-wrap">{run.execution_status || run.status || "-"}</td>
+                          <td>{getRunCounts(run).processed} / {getRunCounts(run).total}</td>
+                          <td>{getRunCounts(run).succeeded} / {getRunCounts(run).failed}</td>
+                          <td><RunArtifactStatus ready={run.report_ready} label="报告" /></td>
+                          <td><RunArtifactStatus ready={run.canonical_ready} label="Canonical" /></td>
+                          <td><CopyButton value={run.run_dir} label="复制目录" /></td>
+                          <td>
+                            <div className="history-row-actions" onClick={(event) => event.stopPropagation()}>
+                              <button
+                                className="mini-button"
+                                type="button"
+                                onClick={() => handlePreviewReport(run.run_id, { generateIfMissing: !run.report_ready })}
+                              >
+                                预览
+                              </button>
+                              <button className="mini-button danger" type="button" onClick={() => deleteRun(run)}>
+                                删除
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {selectedRun ? (
+                <div className="detail-card history-detail-card">
+                  <SectionTitle title={`Run 详情: ${selectedRun.run_id}`} meta={`${selectedRun.run_kind || "base"} / ${selectedRun.execution_status || selectedRun.status || "-"}`} />
+                  <div className="compact-meta-panel">
+                    <div className="compact-meta-line"><span>Provider</span><strong>{selectedRun.provider_id || "-"}</strong></div>
+                    <div className="compact-meta-line"><span>Model</span><strong>{selectedRun.model_alias || selectedRun.model_name || "-"}</strong></div>
+                    <div className="compact-meta-line"><span>Processed</span><strong>{selectedRunCounts.processed} / {selectedRunCounts.total}</strong></div>
+                    <div className="compact-meta-line"><span>Succeeded</span><strong>{selectedRunCounts.succeeded}</strong></div>
+                    <div className="compact-meta-line"><span>Failed</span><strong>{selectedRunCounts.failed}</strong></div>
+                    <div className="compact-meta-line"><span>Inflight</span><strong>{selectedRunCounts.inflight}</strong></div>
+                  </div>
+                  <div className="history-toolbar history-toolbar-compact">
+                    <div className="history-toolbar-group">
+                      <button
+                        className="mini-button"
+                        type="button"
+                        onClick={() => handlePreviewReport(selectedRun.run_id, { generateIfMissing: !selectedRun.report_ready })}
+                      >
+                        打开报告预览
+                      </button>
+                      <CopyButton value={selectedRun.run_dir} label="复制目录" />
+                    </div>
+                  </div>
+                  <PathList
+                    title="文件路径"
+                    paths={{
+                      run_dir: selectedRun.run_dir,
+                      evaluation_run_path: selectedRun.evaluation_run_path,
+                      item_scores_path: selectedRun.item_scores_path,
+                      summary_path: selectedRun.summary_path,
+                      canonical_summary_path: selectedRun.canonical_summary_path,
+                      report_path: selectedRun.report_path,
+                    }}
+                  />
+                </div>
+              ) : null}
+            </div>
           </section>
         ) : null}
 
         {view === "reports" ? (
-          <section className="panel">
-            <SectionTitle title="报告" />
+          <section className="panel report-page">
+            <SectionTitle title="报告预览" meta={report?.run_id || "选择一个已完成 run"} />
             <PathList title="报告目录" paths={{ reports_root: systemPaths?.reports_root }} />
-            {report ? (
-              <>
-                <div className="meta-row">
-                  <span>Run: {report.run_id}</span>
-                  <span>Path: {report.report_path}</span>
+            <div className="report-page-layout">
+              <div className="detail-card report-browser-card">
+                <SectionTitle title="可预览报告" meta={`${reportCandidates.length} 个已完成 run`} />
+                <div className="config-list report-run-list">
+                  {reportCandidates.slice(0, 24).map((run) => (
+                    <button
+                      key={run.run_id}
+                      type="button"
+                      className={report?.run_id === run.run_id ? "config-row report-run-row active" : "config-row report-run-row"}
+                      onClick={() => handlePreviewReport(run.run_id, { generateIfMissing: !run.report_ready })}
+                    >
+                      <div className="config-row-main">
+                        <div className="config-row-title mono">{run.run_id}</div>
+                        <div className="config-row-subtitle">{run.model_alias || run.model_name || "-"} / {run.execution_status || run.status || "-"}</div>
+                        <div className="config-chip-row">
+                          <RunArtifactStatus ready={run.report_ready} label="报告" />
+                          <RunArtifactStatus ready={run.canonical_ready} label="Canonical" />
+                        </div>
+                      </div>
+                    </button>
+                  ))}
                 </div>
-                {loadingReport ? <div className="muted-text">正在生成或读取报告…</div> : null}
-                <pre className="report-view">{report.content}</pre>
-              </>
-            ) : (
-              <div className="muted-text">先选择一个 run 并生成报告。生成后的 Markdown 会保存在对应 run 目录下。</div>
-            )}
+              </div>
+
+              <div className="stack-sections">
+                {report ? (
+                  <>
+                    <div className="report-hero-surface">
+                      <div className="report-score-grid">
+                        <ScoreCard title="Capability" value={formatValue(reportSummaryMetrics.capability_score ?? 0)} tone="warm" />
+                        <ScoreCard title="Safety" value={formatValue(reportSummaryMetrics.safety_composite_score ?? 0)} tone="neutral" />
+                        <ScoreCard title="Probe" value={formatValue(reportSummaryMetrics.probe_score ?? 0)} tone="cool" />
+                        <ScoreCard title="Overall" value={formatValue(reportSummaryMetrics.overall_macro_score ?? 0)} tone="neutral" />
+                      </div>
+                      <div className="meta-row report-meta-row">
+                        <span>Run: {report.run_id}</span>
+                        <span>Path: {report.report_path}</span>
+                      </div>
+                    </div>
+
+                    <div className="report-preview-grid">
+                      <div className="detail-card report-chart-stage">
+                        <SectionTitle title="结构化图表" meta="默认展示 canonical 汇总口径" />
+                        <ReportCharts reportData={report} />
+                      </div>
+                      <div className="detail-card report-preview-card">
+                        <SectionTitle title="文档预览" meta="Markdown 实时预览" />
+                        <MarkdownPreview content={report.content} />
+                      </div>
+                    </div>
+
+                    {loadingReport ? <div className="muted-text">正在生成或读取报告…</div> : null}
+                    <details className="report-raw-block">
+                      <summary>查看原始 Markdown 报告</summary>
+                      <pre className="report-view">{report.content}</pre>
+                    </details>
+                  </>
+                ) : (
+                  <EmptyState
+                    title="还没有加载报告"
+                    description="你可以从左侧选择一个已完成 run 直接预览；如果该 run 还没有生成报告，系统会自动补生成并加载。"
+                    actionLabel={selectedRunId ? "为当前 Run 生成并预览" : undefined}
+                    onAction={selectedRunId ? () => handlePreviewReport(selectedRunId, { generateIfMissing: true }) : undefined}
+                  />
+                )}
+              </div>
+            </div>
           </section>
         ) : null}
       </main>

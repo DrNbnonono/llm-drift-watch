@@ -228,6 +228,81 @@ class EvaluationSystemTests(unittest.TestCase):
         self.assertLessEqual(len(payload["items"]), 5)
         self.assertGreaterEqual(payload["total"], len(payload["items"]))
 
+    def test_report_payload_generates_when_report_path_missing(self):
+        self._ensure_mock_model()
+        service = EvaluationRunService()
+        run = service.create_run(
+            provider_id="mock_local",
+            model_alias="mock_echo",
+            modules=["C2"],
+            smoke=True,
+            timeout=2,
+            concurrency_limit=1,
+        )
+        run_id = run["run_id"]
+        deadline = time.time() + 10
+        while time.time() < deadline:
+            meta = service.get_run(run_id)
+            if meta["execution_status"] == "completed":
+                break
+            time.sleep(0.1)
+        payload = service.get_report_payload(run_id)
+        self.assertEqual(payload["run_id"], run_id)
+        self.assertIn("report_path", payload)
+        self.assertTrue(payload["report_path"].endswith("report.md"))
+        self.assertIn("content", payload)
+
+    def test_delete_run_removes_run_dir_and_records(self):
+        self._ensure_mock_model()
+        service = EvaluationRunService()
+        run = service.create_run(
+            provider_id="mock_local",
+            model_alias="mock_echo",
+            modules=["C2"],
+            smoke=True,
+            timeout=2,
+            concurrency_limit=1,
+        )
+        run_id = run["run_id"]
+        deadline = time.time() + 10
+        while time.time() < deadline:
+            meta = service.get_run(run_id)
+            if meta["execution_status"] == "completed":
+                break
+            time.sleep(0.1)
+        run_dir = ROOT / "manifests" / "evaluation_runs" / run_id
+        self.assertTrue(run_dir.exists())
+        result = service.delete_run(run_id)
+        self.assertIn(run_id, result["deleted_run_ids"])
+        self.assertFalse(run_dir.exists())
+        with self.assertRaises(FileNotFoundError):
+            service.get_run(run_id)
+
+    def test_bulk_delete_runs_endpoint(self):
+        self._ensure_mock_model()
+        service = EvaluationRunService()
+        run_ids = []
+        for _ in range(2):
+          run = service.create_run(
+              provider_id="mock_local",
+              model_alias="mock_echo",
+              modules=["C2"],
+              smoke=True,
+              timeout=2,
+              concurrency_limit=1,
+          )
+          run_ids.append(run["run_id"])
+        deadline = time.time() + 10
+        while time.time() < deadline:
+            if all(service.get_run(run_id)["execution_status"] == "completed" for run_id in run_ids):
+                break
+            time.sleep(0.1)
+        client = TestClient(app)
+        response = client.post("/api/runs/bulk-delete", json={"run_ids": run_ids})
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(set(payload["deleted_run_ids"]), set(run_ids))
+
     def test_registry_create_provider_and_model(self):
         registry = ProviderRegistry()
         provider_id = "test_openai_provider"
@@ -377,6 +452,34 @@ class EvaluationSystemTests(unittest.TestCase):
         self.assertIn("item_scores_path", meta)
         self.assertIn("summary_path", meta)
         self.assertIn("canonical_ready", meta)
+
+    def test_run_count_semantics_are_normalized(self):
+        service = EvaluationRunService()
+        run_id = f"test-{make_run_id()}"
+        run_dir = ROOT / "manifests" / "evaluation_runs" / run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+        legacy_meta = {
+            "run_id": run_id,
+            "started_at": "2026-05-30T00:00:00Z",
+            "finished_at": "2026-05-30T00:01:00Z",
+            "model_name": "MiniMax-M2.7",
+            "base_url": "https://api.minimaxi.com/anthropic/v1",
+            "bank_version": "QB-v1.0",
+            "status": "completed",
+            "config": {"modules": ["C2"], "timeout": 45},
+            "totals": {"items_total": 2, "items_completed": 1, "items_failed": 1},
+            "summary_metrics": {"module_scores": {"C2": 1.0}},
+        }
+        (run_dir / "evaluation_run.json").write_text(json.dumps(legacy_meta, ensure_ascii=False, indent=2), encoding="utf-8")
+        meta = service.get_run(run_id)
+        self.assertEqual(meta["progress"]["items_processed"], 2)
+        self.assertEqual(meta["progress"]["items_completed"], 2)
+        self.assertEqual(meta["progress"]["items_succeeded"], 1)
+        self.assertEqual(meta["progress"]["items_failed"], 1)
+        self.assertEqual(meta["totals"]["items_processed"], 2)
+        self.assertEqual(meta["totals"]["items_completed"], 2)
+        self.assertEqual(meta["totals"]["items_succeeded"], 1)
+        self.assertEqual(meta["totals"]["items_failed"], 1)
 
 
 if __name__ == "__main__":

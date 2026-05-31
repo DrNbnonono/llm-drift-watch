@@ -11,9 +11,13 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from base64 import urlsafe_b64encode
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
+
+from cryptography.fernet import Fernet, InvalidToken
+from sqlite_runtime import SQLiteStore
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -21,6 +25,7 @@ CONFIG_PATH = ROOT / "config" / "providers.json"
 SUPPORTED_PROTOCOLS = {"anthropic_compatible", "openai_compatible", "gemini", "mock"}
 SUPPORTED_AUTH_SCHEMES = {"x_api_key", "bearer", "x_goog_api_key", "none"}
 SUPPORTED_MODEL_LOOKUP_MODES = {"skip", "get_single", "list_contains"}
+SECRET_KEY_ENV = "QUESTION_BANK_SECRET_KEY"
 
 
 @dataclass(frozen=True)
@@ -53,6 +58,30 @@ class ProviderError(RuntimeError):
         super().__init__(message)
         self.failure_type = failure_type
         self.status_code = status_code
+
+
+def _derive_fernet() -> Fernet:
+    raw = os.environ.get(SECRET_KEY_ENV, "").strip()
+    if not raw:
+        raise ProviderError(
+            f"Missing secret master key env: {SECRET_KEY_ENV}",
+            "model_validation_failed",
+        )
+    key = urlsafe_b64encode(raw.encode("utf-8").ljust(32, b"0")[:32])
+    return Fernet(key)
+
+
+def encrypt_secret(value: str) -> str:
+    return _derive_fernet().encrypt(value.encode("utf-8")).decode("utf-8")
+
+
+def decrypt_secret(value: str | None) -> str:
+    if not value:
+        return ""
+    try:
+        return _derive_fernet().decrypt(value.encode("utf-8")).decode("utf-8")
+    except InvalidToken as exc:
+        raise ProviderError("Stored API key cannot be decrypted with current master key", "model_validation_failed") from exc
 
 
 def classify_error_message(message: str) -> str:
@@ -184,6 +213,72 @@ def _validate_model_input(payload: dict[str, Any], provider_ids: set[str], *, ex
         "enabled": bool(payload.get("enabled", True)),
     }
     return normalized
+
+
+def _validate_connection_input(payload: dict[str, Any], *, existing_connection_id: str | None = None) -> dict[str, Any]:
+    protocol = payload.get("protocol")
+    if protocol not in SUPPORTED_PROTOCOLS:
+        raise ProviderError(f"Unsupported protocol: {protocol}", "model_validation_failed")
+    auth_scheme = payload.get("auth_scheme")
+    if auth_scheme not in SUPPORTED_AUTH_SCHEMES:
+        raise ProviderError(f"Unsupported auth scheme: {auth_scheme}", "model_validation_failed")
+    model_lookup_mode = payload.get("model_lookup_mode", "skip")
+    if model_lookup_mode not in SUPPORTED_MODEL_LOOKUP_MODES:
+        raise ProviderError(f"Unsupported model lookup mode: {model_lookup_mode}", "model_validation_failed")
+    display_name = (payload.get("display_name") or "").strip()
+    vendor_name = (payload.get("vendor_name") or "").strip()
+    model_name = (payload.get("model_name") or "").strip()
+    base_url = (payload.get("base_url") or "").strip().rstrip("/")
+    if not vendor_name:
+        raise ProviderError("vendor_name is required", "model_validation_failed")
+    if not display_name:
+        raise ProviderError("display_name is required", "model_validation_failed")
+    if protocol != "mock" and not base_url:
+        raise ProviderError("base_url is required", "model_validation_failed")
+    if not model_name:
+        raise ProviderError("model_name is required", "model_validation_failed")
+    api_key = (payload.get("api_key") or "").strip()
+    auth_env = (payload.get("auth_env") or "").strip()
+    if auth_scheme != "none" and not api_key and not auth_env and not payload.get("keep_existing_secret"):
+        raise ProviderError("api_key or auth_env is required", "model_validation_failed")
+    if api_key and (len(api_key) < 12 or re.fullmatch(r"[A-Z][A-Z0-9_]*", api_key)):
+        raise ProviderError("api_key looks invalid; please provide the real secret value", "model_validation_failed")
+    if auth_env and (auth_env.startswith("sk-") or len(auth_env) > 80 or not re.match(r"^[A-Z][A-Z0-9_]*$", auth_env)):
+        raise ProviderError("auth_env must be an environment variable name", "model_validation_failed")
+    headers_template = payload.get("headers_template") or {}
+    if not isinstance(headers_template, dict):
+        raise ProviderError("headers_template must be an object", "model_validation_failed")
+    connection_id = (payload.get("connection_id") or existing_connection_id or "").strip() or f"conn_{slugify(vendor_name)}_{slugify(display_name)}"
+    provider_id = (payload.get("provider_id") or f"provider_{connection_id}").strip()
+    model_alias = (payload.get("model_alias") or f"model_{connection_id}").strip()
+    return {
+        "connection_id": connection_id,
+        "vendor_name": vendor_name,
+        "note": (payload.get("note") or "").strip() or None,
+        "homepage_url": (payload.get("homepage_url") or "").strip() or None,
+        "display_name": display_name,
+        "protocol": protocol,
+        "base_url": base_url or "mock://local",
+        "auth_scheme": auth_scheme,
+        "auth_env": auth_env,
+        "api_key": api_key,
+        "provider_id": provider_id,
+        "model_alias": model_alias,
+        "model_name": model_name,
+        "default_timeout": int(payload.get("default_timeout", 45)),
+        "default_max_tokens": int(payload.get("default_max_tokens", 512)),
+        "supports_multi_turn": bool(payload.get("supports_multi_turn", True)),
+        "enabled": bool(payload.get("enabled", True)),
+        "headers_template": headers_template,
+        "model_lookup_mode": model_lookup_mode,
+        "advanced": payload.get("advanced") or {},
+        "keep_existing_secret": bool(payload.get("keep_existing_secret")),
+    }
+
+
+def slugify(text: str) -> str:
+    value = re.sub(r"[^a-z0-9]+", "_", text.strip().lower())
+    return re.sub(r"^_+|_+$", "", value)[:40] or "item"
 
 
 def _build_auth_headers(provider: ProviderConfig, api_key: str) -> dict[str, str]:
@@ -483,12 +578,21 @@ PROTOCOL_MAP = {
 class ProviderRegistry:
     def __init__(self, config_path: Path = CONFIG_PATH):
         self.config_path = config_path
+        self.store = SQLiteStore(legacy_config_path=self.config_path)
         self.reload()
 
     def reload(self) -> None:
-        self.providers, self.models = _load_config(self.config_path)
+        self.providers = {
+            item["provider_id"]: _normalize_provider_payload(item)
+            for item in self.store.load_providers()
+        }
+        self.models = {
+            item["model_alias"]: _normalize_model_payload(item)
+            for item in self.store.load_models()
+        }
+        self.model_connections = {item["connection_id"]: item for item in self.store.load_model_connections()}
 
-    def _save(self) -> None:
+    def _sync_legacy_config(self) -> None:
         payload = {
             "providers": [asdict(provider) for provider in self.providers.values()],
             "models": [asdict(model) for model in self.models.values()],
@@ -496,7 +600,6 @@ class ProviderRegistry:
         payload["providers"].sort(key=lambda row: row["provider_id"])
         payload["models"].sort(key=lambda row: row["model_alias"])
         _write_payload(self.config_path, payload)
-        self.reload()
 
     def list_providers(self) -> list[dict[str, Any]]:
         rows = []
@@ -541,12 +644,154 @@ class ProviderRegistry:
         rows.sort(key=lambda row: row["model_alias"])
         return rows
 
+    def list_model_connections(self) -> list[dict[str, Any]]:
+        rows = []
+        for item in self.model_connections.values():
+            configured = bool(item.get("encrypted_api_key")) or (bool(item.get("auth_env")) and bool(os.environ.get(item["auth_env"], "").strip()))
+            if item["auth_scheme"] == "none":
+                configured = True
+            rows.append(
+                {
+                    "connection_id": item["connection_id"],
+                    "vendor_name": item["vendor_name"],
+                    "note": item.get("note"),
+                    "homepage_url": item.get("homepage_url"),
+                    "display_name": item["display_name"],
+                    "protocol": item["protocol"],
+                    "base_url": item["base_url"],
+                    "auth_scheme": item["auth_scheme"],
+                    "auth_env": item.get("auth_env", ""),
+                    "configured": configured,
+                    "provider_id": item["provider_id"],
+                    "model_alias": item["model_alias"],
+                    "model_name": item["model_name"],
+                    "default_timeout": item["default_timeout"],
+                    "default_max_tokens": item["default_max_tokens"],
+                    "supports_multi_turn": item["supports_multi_turn"],
+                    "enabled": item["enabled"],
+                    "headers_template": item.get("headers_template", {}),
+                    "model_lookup_mode": item.get("model_lookup_mode", "skip"),
+                    "has_stored_secret": bool(item.get("encrypted_api_key")),
+                    "advanced": item.get("advanced", {}),
+                }
+            )
+        rows.sort(key=lambda row: (row["vendor_name"].lower(), row["display_name"].lower()))
+        return rows
+
+    def create_model_connection(self, payload: dict[str, Any]) -> dict[str, Any]:
+        normalized = _validate_connection_input(payload)
+        if normalized["connection_id"] in self.model_connections:
+            raise ProviderError(f"Duplicate connection_id: {normalized['connection_id']}", "model_validation_failed")
+        if normalized["provider_id"] in self.providers or normalized["model_alias"] in self.models:
+            raise ProviderError("Generated provider/model ids conflict with existing records", "model_validation_failed")
+        secret_value = normalized.pop("api_key", "")
+        normalized["encrypted_api_key"] = encrypt_secret(secret_value) if secret_value else None
+        self.store.upsert_provider(
+            {
+                "provider_id": normalized["provider_id"],
+                "display_name": normalized["vendor_name"],
+                "protocol": normalized["protocol"],
+                "base_url": normalized["base_url"],
+                "auth_scheme": normalized["auth_scheme"],
+                "auth_env": normalized["auth_env"],
+                "headers_template": normalized["headers_template"],
+                "model_lookup_mode": normalized["model_lookup_mode"],
+                "enabled": normalized["enabled"],
+            }
+        )
+        self.store.upsert_model(
+            {
+                "model_alias": normalized["model_alias"],
+                "provider_id": normalized["provider_id"],
+                "display_name": normalized["display_name"],
+                "model_name": normalized["model_name"],
+                "default_timeout": normalized["default_timeout"],
+                "default_max_tokens": normalized["default_max_tokens"],
+                "supports_multi_turn": normalized["supports_multi_turn"],
+                "enabled": normalized["enabled"],
+            }
+        )
+        self.store.upsert_model_connection(normalized)
+        self.reload()
+        self._sync_legacy_config()
+        return next(row for row in self.list_model_connections() if row["connection_id"] == normalized["connection_id"])
+
+    def update_model_connection(self, connection_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        if connection_id not in self.model_connections:
+            raise ProviderError(f"connection_id not found: {connection_id}", "model_validation_failed")
+        current = dict(self.model_connections[connection_id])
+        current.update(payload)
+        current["connection_id"] = connection_id
+        current["keep_existing_secret"] = payload.get("keep_existing_secret", True)
+        normalized = _validate_connection_input(current, existing_connection_id=connection_id)
+        secret_value = normalized.pop("api_key", "")
+        if secret_value:
+            normalized["encrypted_api_key"] = encrypt_secret(secret_value)
+        elif normalized.pop("keep_existing_secret", False):
+            normalized["encrypted_api_key"] = self.model_connections[connection_id].get("encrypted_api_key")
+        else:
+            normalized["encrypted_api_key"] = None
+        self.store.upsert_provider(
+            {
+                "provider_id": normalized["provider_id"],
+                "display_name": normalized["vendor_name"],
+                "protocol": normalized["protocol"],
+                "base_url": normalized["base_url"],
+                "auth_scheme": normalized["auth_scheme"],
+                "auth_env": normalized["auth_env"],
+                "headers_template": normalized["headers_template"],
+                "model_lookup_mode": normalized["model_lookup_mode"],
+                "enabled": normalized["enabled"],
+            }
+        )
+        self.store.upsert_model(
+            {
+                "model_alias": normalized["model_alias"],
+                "provider_id": normalized["provider_id"],
+                "display_name": normalized["display_name"],
+                "model_name": normalized["model_name"],
+                "default_timeout": normalized["default_timeout"],
+                "default_max_tokens": normalized["default_max_tokens"],
+                "supports_multi_turn": normalized["supports_multi_turn"],
+                "enabled": normalized["enabled"],
+            }
+        )
+        self.store.upsert_model_connection(normalized)
+        self.reload()
+        self._sync_legacy_config()
+        return next(row for row in self.list_model_connections() if row["connection_id"] == connection_id)
+
+    def delete_model_connection(self, connection_id: str) -> None:
+        if connection_id not in self.model_connections:
+            raise ProviderError(f"connection_id not found: {connection_id}", "model_validation_failed")
+        record = self.model_connections[connection_id]
+        self.store.delete_model_connection(connection_id)
+        if record["model_alias"] in self.models:
+            self.store.delete_model(record["model_alias"])
+        if record["provider_id"] in self.providers:
+            self.store.delete_provider(record["provider_id"])
+        self.reload()
+        self._sync_legacy_config()
+
+    def test_model_connection(self, connection_id: str) -> dict[str, Any]:
+        provider = self.resolve_connection(connection_id)
+        validation = provider.validate_model()
+        return {
+            "ok": True,
+            "connection_id": connection_id,
+            "provider_id": provider.provider.provider_id,
+            "model_alias": provider.model.model_alias,
+            "model_name": provider.model.model_name,
+            "validation": validation,
+        }
+
     def create_provider(self, payload: dict[str, Any]) -> dict[str, Any]:
         normalized = _validate_provider_input(payload)
         if normalized["provider_id"] in self.providers:
             raise ProviderError(f"Duplicate provider_id: {normalized['provider_id']}", "model_validation_failed")
-        self.providers[normalized["provider_id"]] = _normalize_provider_payload(normalized)
-        self._save()
+        self.store.upsert_provider(normalized)
+        self.reload()
+        self._sync_legacy_config()
         return next(row for row in self.list_providers() if row["provider_id"] == normalized["provider_id"])
 
     def update_provider(self, provider_id: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -556,8 +801,9 @@ class ProviderRegistry:
         current.update(payload)
         current["provider_id"] = provider_id
         normalized = _validate_provider_input(current, existing_id=provider_id)
-        self.providers[provider_id] = _normalize_provider_payload(normalized)
-        self._save()
+        self.store.upsert_provider(normalized)
+        self.reload()
+        self._sync_legacy_config()
         return next(row for row in self.list_providers() if row["provider_id"] == provider_id)
 
     def delete_provider(self, provider_id: str) -> None:
@@ -565,15 +811,17 @@ class ProviderRegistry:
             raise ProviderError(f"provider_id not found: {provider_id}", "model_validation_failed")
         if any(model.provider_id == provider_id for model in self.models.values()):
             raise ProviderError("Cannot delete provider with existing models", "model_validation_failed")
-        del self.providers[provider_id]
-        self._save()
+        self.store.delete_provider(provider_id)
+        self.reload()
+        self._sync_legacy_config()
 
     def create_model(self, payload: dict[str, Any]) -> dict[str, Any]:
         normalized = _validate_model_input(payload, set(self.providers.keys()))
         if normalized["model_alias"] in self.models:
             raise ProviderError(f"Duplicate model_alias: {normalized['model_alias']}", "model_validation_failed")
-        self.models[normalized["model_alias"]] = _normalize_model_payload(normalized)
-        self._save()
+        self.store.upsert_model(normalized)
+        self.reload()
+        self._sync_legacy_config()
         return next(row for row in self.list_models() if row["model_alias"] == normalized["model_alias"])
 
     def update_model(self, model_alias: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -583,15 +831,17 @@ class ProviderRegistry:
         current.update(payload)
         current["model_alias"] = model_alias
         normalized = _validate_model_input(current, set(self.providers.keys()), existing_alias=model_alias)
-        self.models[model_alias] = _normalize_model_payload(normalized)
-        self._save()
+        self.store.upsert_model(normalized)
+        self.reload()
+        self._sync_legacy_config()
         return next(row for row in self.list_models() if row["model_alias"] == model_alias)
 
     def delete_model(self, model_alias: str) -> None:
         if model_alias not in self.models:
             raise ProviderError(f"model_alias not found: {model_alias}", "model_validation_failed")
-        del self.models[model_alias]
-        self._save()
+        self.store.delete_model(model_alias)
+        self.reload()
+        self._sync_legacy_config()
 
     def resolve(self, provider_id: str, model_alias: str, timeout: int | None = None) -> BaseProvider:
         provider = self.providers[provider_id]
@@ -616,3 +866,24 @@ class ProviderRegistry:
                 )
         provider_cls = PROTOCOL_MAP[provider.protocol]
         return provider_cls(provider=provider, model=model, api_key=api_key, timeout=timeout)
+
+    def resolve_connection(self, connection_id: str, timeout: int | None = None) -> BaseProvider:
+        if connection_id not in self.model_connections:
+            raise ProviderError(f"connection_id not found: {connection_id}", "model_validation_failed")
+        record = self.model_connections[connection_id]
+        provider = self.providers[record["provider_id"]]
+        model = self.models[record["model_alias"]]
+        if not record.get("enabled", True):
+            raise ProviderError("Model connection is disabled", "model_validation_failed")
+        api_key = ""
+        if provider.auth_scheme != "none":
+            api_key = decrypt_secret(record.get("encrypted_api_key")) if record.get("encrypted_api_key") else ""
+            if not api_key and provider.auth_env:
+                api_key = os.environ.get(provider.auth_env, "").strip()
+            if not api_key:
+                raise ProviderError(
+                    f"Missing credential for model connection {connection_id}",
+                    failure_type="model_validation_failed",
+                )
+        provider_cls = PROTOCOL_MAP[provider.protocol]
+        return provider_cls(provider=provider, model=model, api_key=api_key, timeout=timeout or model.default_timeout)

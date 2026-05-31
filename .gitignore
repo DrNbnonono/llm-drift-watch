@@ -1,5 +1,7 @@
 # Runtime outputs
 manifests/evaluation_runs/
+manifests/evaluation.sqlite
+output/
 *.log
 
 # Local secrets
@@ -13,18 +15,36 @@ raw_sources/
 # Python
 __pycache__/
 *.py[cod]
+*.egg-info/
+*.egg
+dist/
+build/
 .pytest_cache/
 .mypy_cache/
+.ruff_cache/
+
+# SQLite temp files
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
 
 # Frontend dependencies and builds
 frontend/node_modules/
 frontend/dist/
+
+# pnpm
+.pnpm-store/
 
 # Local toolchains and virtual environments
 .tools/
 .venv/
 venv/
 
-# Local editor noise
+# Editor / OS noise
 .DS_Store
 Thumbs.db
+*.bak
+*.tmp
+*.swp
+*.swo
+~*

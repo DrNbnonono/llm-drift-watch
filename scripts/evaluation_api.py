@@ -24,8 +24,9 @@ app.add_middleware(
 
 
 class RunCreateRequest(BaseModel):
-    provider_id: str
-    model_alias: str
+    provider_id: str | None = None
+    model_alias: str | None = None
+    model_connection_id: str | None = None
     modules: list[str] | None = None
     module_filters: list[str] | None = None
     smoke: bool = False
@@ -39,6 +40,10 @@ class RunCreateRequest(BaseModel):
 class RetryRequest(BaseModel):
     timeout: int | None = None
     concurrency_limit: int = Field(default=1, ge=1, le=4)
+
+
+class BulkDeleteRunsRequest(BaseModel):
+    run_ids: list[str] = Field(default_factory=list)
 
 
 class ProviderUpsertRequest(BaseModel):
@@ -64,6 +69,28 @@ class ModelUpsertRequest(BaseModel):
     enabled: bool = True
 
 
+class ModelConnectionUpsertRequest(BaseModel):
+    connection_id: str | None = None
+    vendor_name: str
+    note: str | None = None
+    homepage_url: str | None = None
+    display_name: str
+    protocol: str
+    base_url: str
+    auth_scheme: str
+    auth_env: str = ""
+    api_key: str | None = None
+    model_name: str
+    default_timeout: int = 45
+    default_max_tokens: int = 512
+    supports_multi_turn: bool = True
+    enabled: bool = True
+    headers_template: dict[str, str] = Field(default_factory=dict)
+    model_lookup_mode: str = "skip"
+    advanced: dict[str, Any] = Field(default_factory=dict)
+    keep_existing_secret: bool = True
+
+
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -79,7 +106,48 @@ def list_providers() -> dict[str, Any]:
     return {
         "providers": service.registry.list_providers(),
         "models": service.registry.list_models(),
+        "model_connections": service.registry.list_model_connections(),
     }
+
+
+@app.get("/api/model-connections")
+def list_model_connections() -> dict[str, Any]:
+    return {"connections": service.registry.list_model_connections()}
+
+
+@app.post("/api/model-connections")
+def create_model_connection(payload: ModelConnectionUpsertRequest) -> dict[str, Any]:
+    try:
+        return service.registry.create_model_connection(payload.model_dump(exclude_none=True))
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.patch("/api/model-connections/{connection_id}")
+def update_model_connection(connection_id: str, payload: ModelConnectionUpsertRequest) -> dict[str, Any]:
+    try:
+        data = payload.model_dump(exclude_none=True)
+        data.pop("connection_id", None)
+        return service.registry.update_model_connection(connection_id, data)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.delete("/api/model-connections/{connection_id}")
+def delete_model_connection(connection_id: str) -> dict[str, Any]:
+    try:
+        service.registry.delete_model_connection(connection_id)
+        return {"ok": True, "connection_id": connection_id}
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/model-connections/{connection_id}/test")
+def test_model_connection(connection_id: str) -> dict[str, Any]:
+    try:
+        return service.registry.test_model_connection(connection_id)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/api/providers")
@@ -147,6 +215,7 @@ def create_run(payload: RunCreateRequest) -> dict[str, Any]:
         run = service.create_run(
             provider_id=payload.provider_id,
             model_alias=payload.model_alias,
+            model_connection_id=payload.model_connection_id,
             modules=payload.modules or payload.module_filters,
             smoke=payload.smoke,
             timeout=payload.timeout,
@@ -171,6 +240,26 @@ def get_run(run_id: str) -> dict[str, Any]:
         return service.get_run(run_id)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="run not found") from exc
+
+
+@app.delete("/api/runs/{run_id}")
+def delete_run(run_id: str) -> dict[str, Any]:
+    try:
+        return service.delete_run(run_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="run not found") from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/runs/bulk-delete")
+def bulk_delete_runs(payload: BulkDeleteRunsRequest) -> dict[str, Any]:
+    try:
+        return service.delete_runs(payload.run_ids)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="run not found") from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/api/runs/{run_id}/items")
@@ -301,8 +390,6 @@ def generate_report(run_id: str) -> dict[str, Any]:
 @app.get("/api/reports/{run_id}")
 def get_report(run_id: str) -> dict[str, Any]:
     try:
-        report = service.generate_report(run_id)
-        path = Path(report["report_path"])
-        return {"run_id": run_id, "report_path": str(path), "content": path.read_text(encoding="utf-8")}
+        return service.get_report_payload(run_id)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="run not found") from exc

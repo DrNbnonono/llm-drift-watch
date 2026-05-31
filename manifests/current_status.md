@@ -184,3 +184,21 @@
 - 支持题库浏览、逐题原题详情和多轮时间线
 - 支持页面内新增 Provider / Model 的非密钥配置保存
 - 前端会显示正式题库路径、Provider 配置路径和每个 run 的产物目录
+
+## SQLite 迁移状态
+
+当前已经完成:
+
+- Provider / Model / Run / Item Score 的主状态存储迁移到 `manifests/evaluation.sqlite`
+- 现有 `config/providers.json` 会作为兼容镜像继续保留
+- 现有 `manifests/evaluation_runs/<run_id>/` 继续保留为评测产物目录
+- 历史 run 目录会在服务启动时自动导入 SQLite
+
+当前结构含义:
+
+- `manifests/evaluation.sqlite`
+  - 主状态库，供 API 和前端查询使用
+- `config/providers.json`
+  - 非密钥配置镜像，便于人工查看和初始化导入
+- `manifests/evaluation_runs/<run_id>/`
+  - 逐题结果、summary、canonical、report 等可读产物

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import os
 import re
+import shutil
 import threading
 import time
 import uuid
@@ -33,6 +35,7 @@ from question_bank_runtime import (
     validate_doi,
     write_jsonl,
 )
+from sqlite_runtime import SQLiteStore
 
 
 RUNS_DIR = MANIFESTS / "evaluation_runs"
@@ -404,10 +407,12 @@ def aggregate_scores(item_scores: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 class EvaluationRunService:
-    def __init__(self, registry: ProviderRegistry | None = None):
+    def __init__(self, registry: ProviderRegistry | None = None, store: SQLiteStore | None = None):
         self.registry = registry or ProviderRegistry()
+        self.store = store or self.registry.store
         self.lock = threading.Lock()
         self.threads: dict[str, threading.Thread] = {}
+        self._legacy_runs_synced = False
         self.bank_items = load_bank_items()
         self.bank_item_index = {item["question_id"]: item for item in self.bank_items}
         RUNS_DIR.mkdir(parents=True, exist_ok=True)
@@ -436,35 +441,79 @@ class EvaluationRunService:
     def _write_run_meta(self, run_id: str, payload: dict[str, Any]) -> None:
         self._run_dir(run_id).mkdir(parents=True, exist_ok=True)
         self._run_meta_path(run_id).write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        self.store.upsert_run(payload)
+
+    def _sync_legacy_runs(self, force: bool = False) -> None:
+        if self._legacy_runs_synced and not force:
+            return
+        self.store.import_all_runs(force=force)
+        self._legacy_runs_synced = True
+
+    def _ensure_run_loaded(self, run_id: str) -> None:
+        if self.store.has_run(run_id):
+            return
+        run_dir = self._run_dir(run_id)
+        if (run_dir / "evaluation_run.json").exists():
+            self.store.import_run_dir(run_dir)
 
     def _load_run_meta(self, run_id: str) -> dict[str, Any]:
-        raw = json.loads(self._run_meta_path(run_id).read_text(encoding="utf-8"))
+        self._ensure_run_loaded(run_id)
+        raw = self.store.get_run(run_id)
+        if raw is None:
+            raise FileNotFoundError(run_id)
         return self._normalize_run_meta(raw)
 
     def _normalize_run_meta(self, meta: dict[str, Any]) -> dict[str, Any]:
         meta = dict(meta)
+        meta.setdefault("connection_id", meta.get("config", {}).get("model_connection_id"))
+        meta.setdefault("connection_name", None)
         provider_id = meta.get("provider_id") or infer_legacy_provider_id(meta)
         model_alias = meta.get("model_alias") or infer_legacy_model_alias(meta)
-        totals = meta.get("totals") or {"items_total": 0, "items_completed": 0, "items_failed": 0}
-        items_total = totals.get("items_total", 0)
-        items_completed = totals.get("items_completed", 0)
-        items_failed = totals.get("items_failed", 0)
-        meta.setdefault("provider_id", provider_id)
-        meta.setdefault("model_alias", model_alias)
-        meta.setdefault("execution_status", "completed" if meta.get("status") == "completed" else meta.get("status", "unknown"))
-        meta.setdefault("run_kind", "base")
-        meta.setdefault("parent_run_id", None)
-        meta.setdefault("retry_policy", None)
-        meta.setdefault("source_failed_question_ids", [])
-        meta.setdefault("report_path", None)
-        meta.setdefault("canonical_summary_path", None)
-        meta.setdefault("summary_metrics", {})
-        meta.setdefault("progress", {
+        totals = dict(meta.get("totals") or {"items_total": 0, "items_completed": 0, "items_failed": 0})
+        progress = dict(meta.get("progress") or {})
+        items_total = int(progress.get("items_total", totals.get("items_total", 0)) or 0)
+        items_failed = int(progress.get("items_failed", totals.get("items_failed", 0)) or 0)
+        items_processed = int(progress.get("items_processed", progress.get("items_completed", 0)) or 0)
+        if not items_processed and totals.get("items_completed") is not None:
+            legacy_succeeded = int(totals.get("items_succeeded", totals.get("items_completed", 0)) or 0)
+            items_processed = legacy_succeeded + items_failed
+        items_succeeded = int(totals.get("items_succeeded", totals.get("items_completed", 0)) or 0)
+        items_inflight = max(0, items_total - items_processed)
+        if not meta.get("provider_id"):
+            meta["provider_id"] = provider_id
+        if not meta.get("model_alias"):
+            meta["model_alias"] = model_alias
+        if not meta.get("execution_status"):
+            meta["execution_status"] = "completed" if meta.get("status") == "completed" else meta.get("status", "unknown")
+        if not meta.get("run_kind"):
+            meta["run_kind"] = "base"
+        if "parent_run_id" not in meta:
+            meta["parent_run_id"] = None
+        if not meta.get("retry_policy"):
+            meta["retry_policy"] = None
+        if not meta.get("source_failed_question_ids"):
+            meta["source_failed_question_ids"] = []
+        if not meta.get("report_path"):
+            meta["report_path"] = None
+        if not meta.get("canonical_summary_path"):
+            meta["canonical_summary_path"] = None
+        if not meta.get("summary_metrics"):
+            meta["summary_metrics"] = {}
+        meta["progress"] = {
             "items_total": items_total,
-            "items_completed": items_completed + items_failed,
+            "items_processed": items_processed,
+            "items_completed": items_processed,
+            "items_succeeded": items_succeeded,
             "items_failed": items_failed,
-            "items_inflight": 0,
-        })
+            "items_inflight": items_inflight,
+        }
+        meta["totals"] = {
+            "items_total": items_total,
+            "items_processed": items_processed,
+            "items_completed": items_processed,
+            "items_succeeded": items_succeeded,
+            "items_failed": items_failed,
+        }
         config = dict(meta.get("config") or {})
         config.setdefault("concurrency_limit", 1)
         config.setdefault("question_ids", None)
@@ -491,25 +540,33 @@ class EvaluationRunService:
 
     def _normalize_item_row(self, run_meta: dict[str, Any], row: dict[str, Any]) -> dict[str, Any]:
         row = dict(row)
-        row.setdefault("attempt_run_id", row.get("run_id") or run_meta["run_id"])
-        row.setdefault("source_run_id", run_meta.get("parent_run_id") or row.get("run_id") or run_meta["run_id"])
-        row.setdefault("provider_id", run_meta["provider_id"])
-        row.setdefault("model_alias", run_meta["model_alias"])
-        row.setdefault("failure_type", classify_error_message(row.get("error", "")) if row.get("status") == "failed" else None)
-        row.setdefault("latency_ms", None)
-        row.setdefault("is_retry_attempt", run_meta.get("run_kind") == "retry")
-        row.setdefault("canonical_selected", False)
-        row.setdefault("started_at", run_meta.get("started_at"))
-        row.setdefault("finished_at", run_meta.get("finished_at"))
+        if not row.get("attempt_run_id"):
+            row["attempt_run_id"] = row.get("run_id") or run_meta["run_id"]
+        if not row.get("source_run_id"):
+            row["source_run_id"] = run_meta.get("parent_run_id") or row.get("run_id") or run_meta["run_id"]
+        if not row.get("provider_id"):
+            row["provider_id"] = run_meta["provider_id"]
+        if not row.get("model_alias"):
+            row["model_alias"] = run_meta["model_alias"]
+        if row.get("status") == "failed" and not row.get("failure_type"):
+            row["failure_type"] = classify_error_message(row.get("error", ""))
+        elif "failure_type" not in row:
+            row["failure_type"] = None
+        if "latency_ms" not in row:
+            row["latency_ms"] = None
+        if "is_retry_attempt" not in row:
+            row["is_retry_attempt"] = run_meta.get("run_kind") == "retry"
+        if "canonical_selected" not in row:
+            row["canonical_selected"] = False
+        if not row.get("started_at"):
+            row["started_at"] = run_meta.get("started_at")
+        if not row.get("finished_at"):
+            row["finished_at"] = run_meta.get("finished_at")
         return row
 
     def list_runs(self) -> list[dict[str, Any]]:
-        runs = []
-        for path in sorted(RUNS_DIR.iterdir(), reverse=True):
-            meta_path = path / "evaluation_run.json"
-            if meta_path.exists():
-                raw = json.loads(meta_path.read_text(encoding="utf-8"))
-                runs.append(self._normalize_run_meta(raw))
+        self._sync_legacy_runs()
+        runs = [self._normalize_run_meta(raw) for raw in self.store.list_runs()]
         runs.sort(key=lambda row: row.get("started_at", ""), reverse=True)
         return runs
 
@@ -517,7 +574,7 @@ class EvaluationRunService:
         return self._load_run_meta(run_id)
 
     def get_bank_item(self, question_id: str) -> dict[str, Any] | None:
-        item = self.bank_item_index.get(question_id)
+        item = self.store.get_bank_item(question_id) or self.bank_item_index.get(question_id)
         if not item:
             return None
         return {
@@ -537,46 +594,17 @@ class EvaluationRunService:
     def get_system_paths(self) -> dict[str, str]:
         return {
             "providers_config_path": str(self.registry.config_path),
+            "evaluation_db_path": str(self.store.db_path),
+            "providers_db_path": str(self.store.db_path),
             "bank_items_path": str(FINAL_BANK / "generated" / "final_bank_items.jsonl"),
             "evaluation_runs_root": str(RUNS_DIR),
             "reports_root": str(RUNS_DIR),
+            "secret_master_env": "QUESTION_BANK_SECRET_KEY",
+            "secret_master_configured": "true" if bool(os.environ.get("QUESTION_BANK_SECRET_KEY", "").strip()) else "false",
         }
 
     def get_bank_facets(self) -> dict[str, Any]:
-        module_counts: dict[str, int] = defaultdict(int)
-        subtype_meta: dict[str, dict[str, Any]] = {}
-        item_format_counts: dict[str, int] = defaultdict(int)
-        for row in self.bank_items:
-            module = row["module"]
-            item_format = row["item_format"]
-            subtype = row.get("subtype") or "unknown"
-            module_counts[module] += 1
-            item_format_counts[item_format] += 1
-            if subtype not in subtype_meta:
-                subtype_meta[subtype] = {"value": subtype, "count": 0, "modules": set()}
-            subtype_meta[subtype]["count"] += 1
-            subtype_meta[subtype]["modules"].add(module)
-        subtypes = []
-        for meta in subtype_meta.values():
-            subtypes.append(
-                {
-                    "value": meta["value"],
-                    "count": meta["count"],
-                    "modules": sorted(meta["modules"]),
-                }
-            )
-        return {
-            "total": len(self.bank_items),
-            "modules": [
-                {"value": module, "count": count}
-                for module, count in sorted(module_counts.items())
-            ],
-            "subtypes": sorted(subtypes, key=lambda item: (item["modules"][0] if item["modules"] else "", item["value"])),
-            "item_formats": [
-                {"value": item_format, "count": count}
-                for item_format, count in sorted(item_format_counts.items())
-            ],
-        }
+        return self.store.get_bank_facets()
 
     def _enrich_item_row(self, row: dict[str, Any]) -> dict[str, Any]:
         enriched = dict(row)
@@ -596,8 +624,10 @@ class EvaluationRunService:
         limit: int | None = None,
     ) -> dict[str, Any]:
         run_meta = self.get_run(run_id)
-        item_scores_path = self._item_scores_path(run_id)
-        raw_rows = load_jsonl(item_scores_path) if item_scores_path.exists() else []
+        raw_rows = self.store.list_run_items(run_id)
+        if not raw_rows and self._item_scores_path(run_id).exists():
+            self.store.import_run_dir(self._run_dir(run_id))
+            raw_rows = self.store.list_run_items(run_id)
         rows = [self._normalize_item_row(run_meta, row) for row in raw_rows]
         if module:
             rows = [row for row in rows if row["module"] == module]
@@ -645,39 +675,21 @@ class EvaluationRunService:
         offset: int = 0,
         limit: int = 50,
     ) -> dict[str, Any]:
-        rows = self.bank_items
-        if module:
-            rows = [row for row in rows if row["module"] == module]
-        if subtype:
-            rows = [row for row in rows if row.get("subtype") == subtype]
-        if item_format:
-            rows = [row for row in rows if row.get("item_format") == item_format]
-        if keyword:
-            needle = keyword.lower()
-            rows = [
-                row for row in rows
-                if needle in json.dumps({
-                    "question_id": row.get("question_id"),
-                    "module": row.get("module"),
-                    "subtype": row.get("subtype"),
-                    "prompt_template": row.get("prompt_template"),
-                    "turn_script": row.get("turn_script"),
-                }, ensure_ascii=False).lower()
-            ]
-        total = len(rows)
-        page = rows[offset:offset + limit]
-        return {
-            "items": [self.get_bank_item(row["question_id"]) for row in page],
-            "total": total,
-            "offset": offset,
-            "limit": limit,
-        }
+        return self.store.list_bank_items(
+            module=module,
+            subtype=subtype,
+            item_format=item_format,
+            keyword=keyword,
+            offset=offset,
+            limit=limit,
+        )
 
     def create_run(
         self,
         *,
-        provider_id: str,
-        model_alias: str,
+        provider_id: str | None,
+        model_alias: str | None,
+        model_connection_id: str | None = None,
         modules: list[str] | None = None,
         smoke: bool = False,
         timeout: int | None = None,
@@ -698,11 +710,21 @@ class EvaluationRunService:
             limit_per_module=limit_per_module,
             max_items=max_items,
         )
-        provider = self.registry.resolve(provider_id, model_alias, timeout=timeout)
+        if model_connection_id:
+            provider = self.registry.resolve_connection(model_connection_id, timeout=timeout)
+            provider_id = provider.provider.provider_id
+            model_alias = provider.model.model_alias
+            connection_record = self.registry.model_connections.get(model_connection_id, {})
+            connection_name = connection_record.get("display_name")
+        else:
+            provider = self.registry.resolve(provider_id, model_alias, timeout=timeout)
+            connection_name = None
         bank_version = infer_bank_version(items)
         run_id = make_run_id()
         meta = {
             "run_id": run_id,
+            "connection_id": model_connection_id,
+            "connection_name": connection_name,
             "provider_id": provider_id,
             "model_alias": model_alias,
             "model_name": provider.model.model_name,
@@ -724,16 +746,21 @@ class EvaluationRunService:
                 "timeout": timeout or provider.model.default_timeout,
                 "concurrency_limit": max(1, concurrency_limit),
                 "question_ids": question_ids,
+                "model_connection_id": model_connection_id,
             },
             "progress": {
                 "items_total": len(items),
+                "items_processed": 0,
                 "items_completed": 0,
+                "items_succeeded": 0,
                 "items_failed": 0,
                 "items_inflight": 0,
             },
             "totals": {
                 "items_total": len(items),
+                "items_processed": 0,
                 "items_completed": 0,
+                "items_succeeded": 0,
                 "items_failed": 0,
             },
             "summary_metrics": {},
@@ -747,9 +774,9 @@ class EvaluationRunService:
         thread.start()
         return meta
 
-    def _score_single_item(self, run_id: str, item: dict[str, Any], provider_id: str, model_alias: str, timeout: int, max_tokens: int) -> dict[str, Any]:
+    def _score_single_item(self, run_id: str, item: dict[str, Any], provider_id: str, model_alias: str, timeout: int, max_tokens: int, connection_id: str | None = None) -> dict[str, Any]:
         started = time.time()
-        provider = self.registry.resolve(provider_id, model_alias, timeout=timeout)
+        provider = self.registry.resolve_connection(connection_id, timeout=timeout) if connection_id else self.registry.resolve(provider_id, model_alias, timeout=timeout)
         try:
             response_payload = run_item(provider, item, max_tokens=max_tokens)
             primary_score, score_details = score_item(item, response_payload)
@@ -843,7 +870,7 @@ class EvaluationRunService:
         meta["execution_status"] = "running"
         self._write_run_meta(run_id, meta)
         try:
-            provider = self.registry.resolve(meta["provider_id"], meta["model_alias"], timeout=timeout)
+            provider = self.registry.resolve_connection(meta.get("connection_id"), timeout=timeout) if meta.get("connection_id") else self.registry.resolve(meta["provider_id"], meta["model_alias"], timeout=timeout)
             provider.validate_model()
         except Exception as exc:  # noqa: BLE001
             meta["status"] = "failed"
@@ -855,11 +882,12 @@ class EvaluationRunService:
 
         if concurrency_limit == 1:
             for index, item in enumerate(items, start=1):
-                result = self._score_single_item(run_id, item, meta["provider_id"], meta["model_alias"], timeout, max_tokens)
+                result = self._score_single_item(run_id, item, meta["provider_id"], meta["model_alias"], timeout, max_tokens, meta.get("connection_id"))
                 result["is_retry_attempt"] = meta["run_kind"] == "retry"
                 result["source_run_id"] = meta["parent_run_id"] or run_id
                 item_scores.append(result)
                 write_jsonl(self._item_scores_path(run_id), item_scores)
+                self.store.upsert_run_item(result)
                 self._update_progress(meta, item_scores, items_total=len(items))
         else:
             with ThreadPoolExecutor(max_workers=concurrency_limit) as executor:
@@ -872,6 +900,7 @@ class EvaluationRunService:
                         meta["model_alias"],
                         timeout,
                         max_tokens,
+                        meta.get("connection_id"),
                     ): item
                     for item in items
                 }
@@ -881,6 +910,7 @@ class EvaluationRunService:
                     result["source_run_id"] = meta["parent_run_id"] or run_id
                     item_scores.append(result)
                     write_jsonl(self._item_scores_path(run_id), item_scores)
+                    self.store.upsert_run_item(result)
                     self._update_progress(meta, item_scores, items_total=len(items))
 
         summary_metrics = aggregate_scores(item_scores)
@@ -890,7 +920,9 @@ class EvaluationRunService:
         meta["summary_metrics"] = summary_metrics
         meta["totals"] = {
             "items_total": len(items),
-            "items_completed": sum(1 for row in item_scores if row["status"] == "ok"),
+            "items_processed": len(items),
+            "items_completed": len(items),
+            "items_succeeded": sum(1 for row in item_scores if row["status"] == "ok"),
             "items_failed": sum(1 for row in item_scores if row["status"] == "failed"),
         }
         self._write_run_meta(run_id, meta)
@@ -903,13 +935,17 @@ class EvaluationRunService:
         summary_metrics = aggregate_scores(item_scores)
         meta["progress"] = {
             "items_total": items_total,
+            "items_processed": completed,
             "items_completed": completed,
+            "items_succeeded": ok,
             "items_failed": failed,
             "items_inflight": max(0, items_total - completed),
         }
         meta["totals"] = {
             "items_total": items_total,
-            "items_completed": ok,
+            "items_processed": completed,
+            "items_completed": completed,
+            "items_succeeded": ok,
             "items_failed": failed,
         }
         meta["summary_metrics"] = summary_metrics
@@ -923,6 +959,7 @@ class EvaluationRunService:
         return self.create_run(
             provider_id=base_meta["provider_id"],
             model_alias=base_meta["model_alias"],
+            model_connection_id=base_meta.get("connection_id"),
             modules=base_meta["config"].get("modules"),
             smoke=False,
             timeout=timeout or base_meta["config"].get("timeout"),
@@ -1073,7 +1110,9 @@ class EvaluationRunService:
         summary = aggregate_scores(rows)
         summary["totals"] = {
             "items_total": len(rows),
-            "items_completed": sum(1 for row in rows if row["status"] == "ok"),
+            "items_processed": len(rows),
+            "items_completed": len(rows),
+            "items_succeeded": sum(1 for row in rows if row["status"] == "ok"),
             "items_failed": sum(1 for row in rows if row["status"] == "failed"),
         }
         root_id = self._resolve_root_run_id(run_id)
@@ -1085,20 +1124,59 @@ class EvaluationRunService:
         self._write_run_meta(root_id, meta)
         return summary
 
-    def generate_report(self, run_id: str) -> dict[str, Any]:
+    def build_report_payload(self, run_id: str) -> dict[str, Any]:
         root_id = self._resolve_root_run_id(run_id)
         root_meta = self.get_run(root_id)
         summary = self.get_canonical_summary(root_id)
         items = self.get_canonical_items(root_id)
         failures = defaultdict(int)
+        status_counts = defaultdict(int)
         success_by_module = defaultdict(int)
         failure_by_module = defaultdict(int)
         for row in items:
+            status_counts[row["status"]] += 1
             if row["status"] == "failed":
                 failures[row.get("failure_type") or "unknown_provider_error"] += 1
                 failure_by_module[row["module"]] += 1
             else:
                 success_by_module[row["module"]] += 1
+        module_rows = []
+        for module, score in sorted(summary["module_scores"].items()):
+            module_rows.append(
+                {
+                    "module": module,
+                    "score": score,
+                    "ok": success_by_module.get(module, 0),
+                    "failed": failure_by_module.get(module, 0),
+                }
+            )
+        lineage = self._collect_lineage_runs(root_id)
+        return {
+            "run_id": root_id,
+            "meta": root_meta,
+            "summary": summary,
+            "module_rows": module_rows,
+            "failure_counts": dict(sorted(failures.items(), key=lambda item: (-item[1], item[0]))),
+            "status_counts": dict(status_counts),
+            "lineage": [
+                {
+                    "run_id": row["run_id"],
+                    "run_kind": row.get("run_kind", "base"),
+                    "parent_run_id": row.get("parent_run_id"),
+                    "status": row.get("status"),
+                }
+                for row in lineage
+            ],
+        }
+
+    def generate_report(self, run_id: str) -> dict[str, Any]:
+        payload = self.build_report_payload(run_id)
+        root_id = payload["run_id"]
+        root_meta = payload["meta"]
+        summary = payload["summary"]
+        failures = defaultdict(int, payload["failure_counts"])
+        success_by_module = defaultdict(int, {row["module"]: row["ok"] for row in payload["module_rows"]})
+        failure_by_module = defaultdict(int, {row["module"]: row["failed"] for row in payload["module_rows"]})
         module_scores = summary["module_scores"]
         highest = max(module_scores.items(), key=lambda x: x[1]) if module_scores else ("-", 0.0)
         lowest = min(module_scores.items(), key=lambda x: x[1]) if module_scores else ("-", 0.0)
@@ -1120,7 +1198,8 @@ class EvaluationRunService:
             "",
             "## 执行概况",
             f"- Total Items: `{summary['totals']['items_total']}`",
-            f"- Completed: `{summary['totals']['items_completed']}`",
+            f"- Processed: `{summary['totals']['items_processed']}`",
+            f"- Succeeded: `{summary['totals']['items_succeeded']}`",
             f"- Failed: `{summary['totals']['items_failed']}`",
             f"- Failure Rate: `{round(summary['totals']['items_failed'] / max(1, summary['totals']['items_total']), 4)}`",
             f"- Retry Runs: `{sum(1 for run in lineage if run.get('run_kind') == 'retry')}`",
@@ -1166,3 +1245,68 @@ class EvaluationRunService:
         root_meta["report_path"] = str(report_path)
         self._write_run_meta(root_id, root_meta)
         return {"run_id": root_id, "report_path": str(report_path)}
+
+    def get_report_payload(self, run_id: str) -> dict[str, Any]:
+        meta = self.get_run(run_id)
+        path = Path(meta.get("report_path") or "")
+        if not path.exists() or not path.is_file():
+            report = self.generate_report(run_id)
+            path = Path(report["report_path"])
+        payload = self.build_report_payload(run_id)
+        payload.update(
+            {
+                "report_path": str(path),
+                "content": path.read_text(encoding="utf-8"),
+            }
+        )
+        return payload
+
+    def delete_run(self, run_id: str) -> dict[str, Any]:
+        target = self.get_run(run_id)
+        root_before = self._resolve_root_run_id(run_id)
+        runs = self.list_runs()
+        to_delete = []
+        pending = {run_id}
+        while pending:
+            current_id = pending.pop()
+            current = next((row for row in runs if row["run_id"] == current_id), None)
+            if not current:
+                continue
+            to_delete.append(current_id)
+            for row in runs:
+                if row.get("parent_run_id") == current_id and row["run_id"] not in to_delete:
+                    pending.add(row["run_id"])
+        affected_root = target.get("parent_run_id")
+        for victim in sorted(set(to_delete), reverse=True):
+            self.store.delete_run(victim)
+            run_dir = self._run_dir(victim)
+            if run_dir.exists():
+                shutil.rmtree(run_dir, ignore_errors=True)
+        if affected_root:
+            try:
+                root_meta = self.get_run(affected_root)
+                for artifact in [self._canonical_items_path(affected_root), self._canonical_summary_path(affected_root), self._report_path(affected_root)]:
+                    if artifact.exists():
+                        artifact.unlink()
+                root_meta["canonical_summary_path"] = None
+                root_meta["report_path"] = None
+                self._write_run_meta(affected_root, root_meta)
+            except FileNotFoundError:
+                pass
+        return {"ok": True, "deleted_run_ids": sorted(set(to_delete)), "root_run_id": affected_root or root_before}
+
+    def delete_runs(self, run_ids: list[str]) -> dict[str, Any]:
+        unique_ids = [run_id for run_id in dict.fromkeys(run_ids) if run_id]
+        if not unique_ids:
+            return {"ok": True, "deleted_run_ids": [], "root_run_ids": []}
+        deleted: set[str] = set()
+        roots: set[str] = set()
+        for run_id in unique_ids:
+            if run_id in deleted:
+                continue
+            result = self.delete_run(run_id)
+            deleted.update(result.get("deleted_run_ids", []))
+            root_run_id = result.get("root_run_id")
+            if root_run_id:
+                roots.add(root_run_id)
+        return {"ok": True, "deleted_run_ids": sorted(deleted), "root_run_ids": sorted(roots)}

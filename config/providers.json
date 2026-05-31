@@ -47,6 +47,17 @@
       "enabled": true
     },
     {
+      "provider_id": "minimax_sqlite_verify",
+      "display_name": "MiniMax SQLite Verify",
+      "protocol": "anthropic_compatible",
+      "base_url": "https://api.minimax.chat/anthropic/v1",
+      "auth_scheme": "x_api_key",
+      "auth_env": "MINIMAX_API_KEY",
+      "headers_template": {},
+      "model_lookup_mode": "skip",
+      "enabled": true
+    },
+    {
       "provider_id": "mock_local",
       "display_name": "Mock Local Provider",
       "protocol": "mock",
@@ -66,6 +77,17 @@
       "auth_env": "OPENAI_API_KEY",
       "headers_template": {},
       "model_lookup_mode": "list_contains",
+      "enabled": true
+    },
+    {
+      "provider_id": "provider_conn_minimax_ui_live_minimax_ui_live_validation",
+      "display_name": "MiniMax UI Live",
+      "protocol": "anthropic_compatible",
+      "base_url": "https://api.minimax.chat/anthropic/v1",
+      "auth_scheme": "x_api_key",
+      "auth_env": "MINIMAX_API_KEY",
+      "headers_template": {},
+      "model_lookup_mode": "skip",
       "enabled": true
     }
   ],
@@ -91,11 +113,41 @@
       "enabled": true
     },
     {
+      "model_alias": "minimax_m2_7_sqlite_verify",
+      "provider_id": "minimax_sqlite_verify",
+      "display_name": "MiniMax M2.7 SQLite Verify",
+      "model_name": "MiniMax-M2.7",
+      "default_timeout": 60,
+      "default_max_tokens": 128,
+      "supports_multi_turn": true,
+      "enabled": true
+    },
+    {
+      "model_alias": "minimax_m2_7_ui_872343",
+      "provider_id": "minimax_sqlite_verify",
+      "display_name": "MiniMax UI Verify 2343",
+      "model_name": "MiniMax-M2.7",
+      "default_timeout": 60,
+      "default_max_tokens": 512,
+      "supports_multi_turn": true,
+      "enabled": true
+    },
+    {
       "model_alias": "mock_echo",
       "provider_id": "mock_local",
       "display_name": "Mock Echo",
       "model_name": "mock-echo",
       "default_timeout": 2,
+      "default_max_tokens": 128,
+      "supports_multi_turn": true,
+      "enabled": true
+    },
+    {
+      "model_alias": "model_conn_minimax_ui_live_minimax_ui_live_validation",
+      "provider_id": "provider_conn_minimax_ui_live_minimax_ui_live_validation",
+      "display_name": "MiniMax UI Live Validation",
+      "model_name": "MiniMax-M2.7",
+      "default_timeout": 60,
       "default_max_tokens": 128,
       "supports_multi_turn": true,
       "enabled": true
