@@ -1299,12 +1299,209 @@ pre {
   gap: 1rem;
 }
 
+.report-analytics-grid,
 .report-grid {
+  display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
 }
 
 .report-chart-card {
   min-width: 0;
+}
+
+.report-module-stage,
+.report-lineage-stage {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.82), rgba(252,244,235,0.9));
+}
+
+.report-side-stack {
+  display: grid;
+  gap: 1rem;
+}
+
+.module-compare-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.module-compare-row {
+  padding: 0.95rem 1rem;
+  border-radius: 1.1rem;
+  border: 1px solid rgba(216, 204, 182, 0.7);
+  background: rgba(255,255,255,0.72);
+}
+
+.module-compare-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  align-items: flex-start;
+  margin-bottom: 0.55rem;
+}
+
+.module-compare-head strong,
+.module-compare-head em {
+  font-size: 1rem;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.module-compare-head span {
+  display: block;
+  margin-top: 0.18rem;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.module-compare-track {
+  height: 0.8rem;
+  border-radius: 999px;
+  background: rgba(228, 215, 194, 0.9);
+  overflow: hidden;
+}
+
+.module-compare-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), #df7c4d 65%, #f1bca2);
+  box-shadow: 0 0 14px rgba(178, 85, 47, 0.22);
+}
+
+.donut-card {
+  margin-top: 0;
+}
+
+.donut-layout {
+  display: grid;
+  grid-template-columns: 9rem minmax(0, 1fr);
+  gap: 1rem;
+  align-items: center;
+}
+
+.donut-shell {
+  width: 9rem;
+  height: 9rem;
+  border-radius: 999px;
+  padding: 0.95rem;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), 0 18px 34px rgba(18, 54, 70, 0.08);
+}
+
+.donut-center {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: rgba(255, 252, 247, 0.96);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  box-shadow: inset 0 0 0 1px rgba(216, 204, 182, 0.55);
+}
+
+.donut-center span {
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+
+.donut-center strong {
+  margin-top: 0.25rem;
+  font-size: 1.55rem;
+  letter-spacing: -0.04em;
+}
+
+.donut-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.donut-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.donut-dot {
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  box-shadow: 0 0 0 3px rgba(255,255,255,0.6);
+}
+
+.donut-legend-text {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  width: 100%;
+  font-size: 0.92rem;
+}
+
+.donut-legend-text strong {
+  font-weight: 600;
+}
+
+.lineage-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.lineage-card {
+  display: grid;
+  grid-template-columns: 3rem minmax(0, 1fr);
+  gap: 0.9rem;
+  align-items: stretch;
+}
+
+.lineage-step {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 0.85rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.lineage-card-body {
+  padding: 0.95rem 1rem;
+  border-radius: 1.1rem;
+  border: 1px solid rgba(216, 204, 182, 0.72);
+  background: rgba(255,255,255,0.74);
+  position: relative;
+}
+
+.lineage-card-body::before {
+  content: "";
+  position: absolute;
+  left: -1.45rem;
+  top: 1.2rem;
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--accent), #df7c4d);
+  box-shadow: 0 0 0 4px rgba(240, 212, 201, 0.42);
+}
+
+.lineage-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  align-items: flex-start;
+}
+
+.report-stat-grid-rich {
+  margin-top: 1rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .mini-bar-row + .mini-bar-row {
@@ -1596,11 +1793,17 @@ pre {
 
   .connection-grid,
   .report-grid,
+  .report-analytics-grid,
   .history-hero,
   .history-layout,
   .report-page-layout,
   .report-preview-grid,
   .report-score-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .donut-layout,
+  .report-stat-grid-rich {
     grid-template-columns: 1fr;
   }
 }
@@ -1633,6 +1836,7 @@ pre {
   .connection-grid,
   .connection-meta-grid,
   .report-grid,
+  .report-analytics-grid,
   .history-hero,
   .history-layout,
   .report-page-layout,
@@ -1703,5 +1907,15 @@ pre {
 
   .history-table-shell {
     overflow-x: auto;
+  }
+
+  .donut-layout,
+  .report-stat-grid-rich {
+    grid-template-columns: 1fr;
+  }
+
+  .donut-shell {
+    width: 8rem;
+    height: 8rem;
   }
 }

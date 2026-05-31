@@ -192,57 +192,135 @@ function MiniTrendBar({ label, value, total, tone = "warm" }) {
   );
 }
 
+function DonutChart({ title, total, segments, emptyLabel = "暂无数据", tone = "warm" }) {
+  const safeTotal = Math.max(total || 0, 0);
+  const palette = {
+    warm: ["#b2552f", "#df7c4d", "#f0c4b1", "#d9a48b"],
+    cool: ["#2f6f8f", "#6ca7c4", "#b4d7e7", "#86c0da"],
+    ok: ["#467a4b", "#76b36f", "#b9d8b4", "#95c490"],
+    neutral: ["#4c5b63", "#8da0a8", "#d0dbdf", "#aebec4"],
+  }[tone] || ["#b2552f", "#df7c4d", "#f0c4b1"];
+
+  let cursor = 0;
+  const gradientStops = [];
+  segments.forEach((segment, index) => {
+    const share = safeTotal > 0 ? (segment.value / safeTotal) * 100 : 0;
+    const nextCursor = cursor + share;
+    const color = palette[index % palette.length];
+    gradientStops.push(`${color} ${cursor}% ${nextCursor}%`);
+    cursor = nextCursor;
+  });
+  const background = safeTotal > 0
+    ? `conic-gradient(${gradientStops.join(", ")})`
+    : "conic-gradient(rgba(216,204,182,0.35) 0% 100%)";
+
+  return (
+    <div className="detail-card donut-card">
+      <SectionTitle title={title} meta={safeTotal ? `总计 ${safeTotal}` : emptyLabel} />
+      <div className="donut-layout">
+        <div className="donut-shell" style={{ background }}>
+          <div className="donut-center">
+            <span>{safeTotal ? "总计" : "状态"}</span>
+            <strong>{safeTotal}</strong>
+          </div>
+        </div>
+        <div className="donut-legend">
+          {segments.length ? segments.map((segment, index) => (
+            <div className="donut-legend-row" key={`${segment.label}-${index}`}>
+              <span className="donut-dot" style={{ background: palette[index % palette.length] }} />
+              <div className="donut-legend-text">
+                <strong>{segment.label}</strong>
+                <span>{segment.value}</span>
+              </div>
+            </div>
+          )) : <div className="muted-text">{emptyLabel}</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ReportCharts({ reportData }) {
   if (!reportData?.summary) {
     return null;
   }
-  const moduleRows = reportData.module_rows || [];
+  const moduleRows = (reportData.module_rows || []).slice().sort((a, b) => (b.score || 0) - (a.score || 0));
   const maxModuleScore = Math.max(1, ...moduleRows.map((row) => row.score || 0));
   const failureRows = Object.entries(reportData.failure_counts || {});
-  const failureTotal = failureRows.reduce((sum, [, count]) => sum + count, 0);
+  const failureTotal = failureRows.reduce((sum, [, count]) => sum + count, 0) || 0;
   const statusCounts = reportData.status_counts || {};
   const processed = reportData.summary?.totals?.items_processed || 0;
   const succeeded = reportData.summary?.totals?.items_succeeded || 0;
   const failed = reportData.summary?.totals?.items_failed || 0;
+  const statusSegments = [
+    { label: "Succeeded", value: succeeded },
+    { label: "Failed", value: failed },
+    { label: "Inflight", value: Math.max(0, (reportData.summary?.progress?.items_inflight || 0)) },
+  ].filter((item) => item.value > 0);
   return (
     <div className="report-dashboard">
-      <div className="report-grid">
-        <div className="detail-card report-chart-card">
-          <SectionTitle title="模块得分" meta={`共 ${moduleRows.length} 个模块`} />
-          {moduleRows.length ? moduleRows.map((row) => (
-            <MiniTrendBar key={row.module} label={row.module} value={row.score} total={maxModuleScore} tone="warm" />
-          )) : <div className="muted-text">当前没有可视化模块分。</div>}
+      <div className="report-analytics-grid">
+        <div className="detail-card report-chart-card report-module-stage">
+          <SectionTitle title="模块对比" meta={`共 ${moduleRows.length} 个模块`} />
+          {moduleRows.length ? (
+            <div className="module-compare-list">
+              {moduleRows.map((row) => (
+                <div className="module-compare-row" key={row.module}>
+                  <div className="module-compare-head">
+                    <div>
+                      <strong>{row.module}</strong>
+                      <span>ok {row.ok_count} · failed {row.failed_count}</span>
+                    </div>
+                    <em>{formatValue(row.score)}</em>
+                  </div>
+                  <div className="module-compare-track">
+                    <div className="module-compare-fill" style={{ width: `${Math.max(4, ((row.score || 0) / maxModuleScore) * 100)}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : <div className="muted-text">当前没有可视化模块分。</div>}
         </div>
-        <div className="detail-card report-chart-card">
-          <SectionTitle title="状态分布" meta={`Processed ${processed}`} />
-          <MiniTrendBar label="Succeeded" value={succeeded} total={Math.max(processed, 1)} tone="ok" />
-          <MiniTrendBar label="Failed" value={failed} total={Math.max(processed, 1)} tone="failed" />
-          <div className="report-stat-grid">
-            <SummaryMiniCard label="Retry Runs" value={reportData.lineage?.filter((item) => item.run_kind === "retry").length || 0} />
-            <SummaryMiniCard label="Canonical Items" value={reportData.summary?.totals?.items_total || 0} />
-          </div>
+        <div className="report-side-stack">
+          <DonutChart title="状态分布" total={processed} segments={statusSegments} emptyLabel="尚无处理结果" tone="ok" />
+          <DonutChart
+            title="失败类型分布"
+            total={failureTotal}
+            segments={failureRows.map(([label, value]) => ({ label, value }))}
+            emptyLabel="没有失败类型"
+            tone="warm"
+          />
         </div>
       </div>
-      <div className="report-grid">
-        <div className="detail-card report-chart-card">
-          <SectionTitle title="失败类型分布" meta={`共 ${failureTotal} 次失败`} />
-          {failureRows.length ? failureRows.map(([failureType, count]) => (
-            <MiniTrendBar key={failureType} label={failureType} value={count} total={Math.max(failureTotal, 1)} tone="failed" />
-          )) : <div className="muted-text">当前没有失败类型。</div>}
-        </div>
-        <div className="detail-card report-chart-card">
-          <SectionTitle title="运行链路" meta={`共 ${reportData.lineage?.length || 0} 个 run`} />
-          <div className="lineage-list">
-            {(reportData.lineage || []).map((row) => (
-              <div className="lineage-row" key={row.run_id}>
-                <div>
-                  <div className="config-row-title mono">{row.run_id}</div>
-                  <div className="config-row-subtitle">{row.run_kind} / parent {row.parent_run_id || "-"}</div>
+      <div className="detail-card report-chart-card report-lineage-stage">
+        <SectionTitle title="运行链路时间线" meta={`共 ${reportData.lineage?.length || 0} 个 run`} />
+        <div className="lineage-timeline">
+          {(reportData.lineage || []).map((row, index) => (
+            <div className="lineage-card" key={row.run_id}>
+              <div className="lineage-step">{String(index + 1).padStart(2, "0")}</div>
+              <div className="lineage-card-body">
+                <div className="lineage-card-head">
+                  <div>
+                    <div className="config-row-title mono">{row.run_id}</div>
+                    <div className="config-row-subtitle">{row.run_kind} / parent {row.parent_run_id || "-"}</div>
+                  </div>
+                  <span className={`chip ${row.status === "completed" ? "chip-ok" : "chip-failed"}`}>{row.status}</span>
                 </div>
-                <span className={`chip ${row.status === "completed" ? "chip-ok" : "chip-failed"}`}>{row.status}</span>
+                <div className="config-chip-row">
+                  <span className="chip chip-soft">provider {row.provider_id || "-"}</span>
+                  <span className="chip chip-soft">model {row.model_alias || row.model_name || "-"}</span>
+                </div>
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
+        </div>
+        <div className="report-stat-grid report-stat-grid-rich">
+          <SummaryMiniCard label="Processed" value={processed} />
+          <SummaryMiniCard label="Succeeded" value={succeeded} />
+          <SummaryMiniCard label="Failed" value={failed} />
+          <SummaryMiniCard label="Retry Runs" value={reportData.lineage?.filter((item) => item.run_kind === "retry").length || 0} />
+          <SummaryMiniCard label="Canonical Items" value={reportData.summary?.totals?.items_total || 0} />
+          <SummaryMiniCard label="Failure Types" value={failureRows.length} />
         </div>
       </div>
     </div>
@@ -662,6 +740,7 @@ function App() {
   const [bankPage, setBankPage] = useState(1);
   const [bankPageSize, setBankPageSize] = useState(20);
   const [selectedHistoryRunIds, setSelectedHistoryRunIds] = useState([]);
+  const [activeReportRunId, setActiveReportRunId] = useState(null);
 
   const [runForm, setRunForm] = useState({
     provider_id: "",
@@ -1178,6 +1257,7 @@ function App() {
     setLoadingReport(true);
     setError("");
     setNotice("");
+    setActiveReportRunId(runId);
     try {
       if (generateIfMissing) {
         await apiFetch(`/api/runs/${runId}/report`, { method: "POST" });
@@ -2660,7 +2740,7 @@ function App() {
                     <button
                       key={run.run_id}
                       type="button"
-                      className={report?.run_id === run.run_id ? "config-row report-run-row active" : "config-row report-run-row"}
+                      className={(report?.run_id === run.run_id || activeReportRunId === run.run_id) ? "config-row report-run-row active" : "config-row report-run-row"}
                       onClick={() => handlePreviewReport(run.run_id, { generateIfMissing: !run.report_ready })}
                     >
                       <div className="config-row-main">

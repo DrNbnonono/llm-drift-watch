@@ -1151,13 +1151,17 @@ class EvaluationRunService:
                 }
             )
         lineage = self._collect_lineage_runs(root_id)
-        return {
-            "run_id": root_id,
-            "meta": root_meta,
-            "summary": summary,
-            "module_rows": module_rows,
-            "failure_counts": dict(sorted(failures.items(), key=lambda item: (-item[1], item[0]))),
-            "status_counts": dict(status_counts),
+        dashboard = {
+            "scores": {
+                "capability": summary.get("capability_score", 0.0),
+                "safety": summary.get("safety_composite_score", 0.0),
+                "probe": summary.get("probe_score", 0.0),
+                "overall": summary.get("overall_macro_score", 0.0),
+            },
+            "totals": dict(summary.get("totals", {})),
+            "modules": module_rows,
+            "failure_types": dict(sorted(failures.items(), key=lambda item: (-item[1], item[0]))),
+            "statuses": dict(status_counts),
             "lineage": [
                 {
                     "run_id": row["run_id"],
@@ -1167,6 +1171,16 @@ class EvaluationRunService:
                 }
                 for row in lineage
             ],
+        }
+        return {
+            "run_id": root_id,
+            "meta": root_meta,
+            "summary": summary,
+            "module_rows": module_rows,
+            "failure_counts": dict(sorted(failures.items(), key=lambda item: (-item[1], item[0]))),
+            "status_counts": dict(status_counts),
+            "lineage": dashboard["lineage"],
+            "dashboard": dashboard,
         }
 
     def generate_report(self, run_id: str) -> dict[str, Any]:

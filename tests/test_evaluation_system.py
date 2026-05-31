@@ -251,6 +251,9 @@ class EvaluationSystemTests(unittest.TestCase):
         self.assertIn("report_path", payload)
         self.assertTrue(payload["report_path"].endswith("report.md"))
         self.assertIn("content", payload)
+        self.assertIn("dashboard", payload)
+        self.assertIn("modules", payload["dashboard"])
+        self.assertIn("scores", payload["dashboard"])
 
     def test_delete_run_removes_run_dir_and_records(self):
         self._ensure_mock_model()
