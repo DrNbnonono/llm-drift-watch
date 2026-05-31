@@ -40,6 +40,10 @@ frontend/dist/
 .venv/
 venv/
 
+# Large candidate files (>50MB, re-extractable from public sources)
+normalized/cnn_dailymail_candidates.jsonl
+normalized/hotpotqa_candidates.jsonl
+
 # Editor / OS noise
 .DS_Store
 Thumbs.db
