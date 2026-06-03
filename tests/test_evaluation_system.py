@@ -14,7 +14,7 @@ SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 from evaluation_api import app, service as api_service  # noqa: E402
-from evaluation_engine import EvaluationRunService, make_run_id  # noqa: E402
+from evaluation_engine import EvaluationRunService, make_run_id, score_item  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from provider_runtime import ProviderRegistry  # noqa: E402
 from question_bank_runtime import write_jsonl  # noqa: E402
@@ -219,9 +219,46 @@ class EvaluationSystemTests(unittest.TestCase):
         self.assertIn("bank_item", payload["items"][0])
         self.assertEqual(payload["items"][0]["bank_item"]["question_id"], payload["items"][0]["question_id"])
 
+    def test_consistency_bundle_scores_semantic_equivalence(self):
+        item = {
+            "question_id": "C4-test",
+            "module": "C4",
+            "scoring_method": "consistency_bundle",
+            "ground_truth": "Canberra",
+            "scoring_params": {"accepted_answers": ["Canberra", "堪培拉"]},
+        }
+        response_payload = {
+            "turn_results": [
+                {"text": "澳大利亚的首都是堪培拉（Canberra）。"},
+                {"text": "行政首都是 Canberra。"},
+                {"text": "联邦政府所在地是堪培拉。"},
+            ]
+        }
+        score, details = score_item(item, response_payload)
+        self.assertEqual(score, 1.0)
+        self.assertEqual(details["consistency"], 1.0)
+        self.assertEqual(details["accuracy"], 1.0)
+
     def test_items_endpoint_paginates(self):
+        self._ensure_mock_model()
+        service = EvaluationRunService()
+        run = service.create_run(
+            provider_id="mock_local",
+            model_alias="mock_echo",
+            modules=["C2"],
+            smoke=True,
+            timeout=2,
+            concurrency_limit=1,
+        )
+        run_id = run["run_id"]
+        deadline = time.time() + 10
+        while time.time() < deadline:
+            meta = service.get_run(run_id)
+            if meta["execution_status"] == "completed":
+                break
+            time.sleep(0.1)
         client = TestClient(app)
-        response = client.get("/api/runs/20260528T065610Z-bfdf1653/items?limit=5&offset=0")
+        response = client.get(f"/api/runs/{run_id}/items?limit=5&offset=0")
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload["limit"], 5)

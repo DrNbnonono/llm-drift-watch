@@ -27,7 +27,7 @@
 4. 运行期 schema：
    - `schema/evaluation_run.schema.json`
    - `schema/item_score.schema.json`
-5. 一版完整正式题库 `QB-v1.0`
+5. 一版完整正式题库 `QB-v1.1`
 6. 多模型 provider 注册表：`config/providers.json`
 7. 统一 provider 抽象层：`scripts/provider_runtime.py`
 8. 后台评测任务服务：`scripts/evaluation_engine.py`
@@ -70,20 +70,24 @@
 - `rewrite_drafts/generated/rewrite_drafts.jsonl`
 - `final_bank_specs/generated/final_bank_items.jsonl`
 - `manifests/final_bank_summary.json`
+- `rewrite_drafts/generated/rewrite_drafts_qbv1_0.jsonl`
+- `final_bank_specs/generated/final_bank_items_qbv1_0.jsonl`
+- `manifests/final_bank_summary_qbv1_0.json`
 
 当前正式题库总数:
 
-- 单轮题 `457`
+- 单轮题 `517`
 - 多轮组 `110`
-- 合计 `567`
+- 合计 `627`
 
 模块数量已对齐设计配额:
 
 - `A1 50`
-- `A2 40`
+- `A2 50`
 - `A3 50`
 - `A4 30`
 - `A5 30`
+- `A6 50`
 - `B1 40`
 - `B2 41`
 - `B3 40`

@@ -1,5 +1,6 @@
 # Runtime outputs
 manifests/evaluation_runs/
+manifests/evaluation_reports/
 manifests/evaluation.sqlite
 output/
 *.log
@@ -52,3 +53,4 @@ Thumbs.db
 *.swp
 *.swo
 ~*
+prompt.md

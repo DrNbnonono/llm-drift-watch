@@ -25,7 +25,7 @@ question_bank_workspace/
 ├── docs/                        # 设计文档与蓝图
 ├── final_bank_specs/
 │   └── generated/
-│       └── final_bank_items.jsonl  # 正式题库 QB-v1.0（567 题）
+│       └── final_bank_items.jsonl  # 正式题库 QB-v1.1（627 题）
 ├── frontend/                    # React + Vite 前端
 │   ├── src/
 │   │   ├── App.jsx              # 主应用组件（含页面路由）
@@ -36,7 +36,7 @@ question_bank_workspace/
 ├── manifests/
 │   ├── evaluation.sqlite        # 主运行态数据库（gitignore）
 │   └── evaluation_runs/         # 单次 run 镜像产物目录（gitignore）
-├── normalized/                  # 公开候选层（13 个来源）
+├── normalized/                  # 公开候选层（17 个来源）
 ├── output/                      # 截图、调试输出（gitignore）
 ├── rewrite_drafts/
 │   └── generated/
@@ -67,22 +67,23 @@ question_bank_workspace/
 └── README.md
 ```
 
-## 当前已完成的正式题库 QB-v1.0
+## 当前已完成的正式题库 QB-v1.1
 
 | 模块 | 题数 | 能力类型 |
 |------|------|----------|
 | A1 | 50 | 数学推理 |
-| A2 | 40 | 代码能力 |
+| A2 | 50 | 高难编程能力 |
 | A3 | 50 | 指令遵循 |
 | A4 | 30 | 阅读理解 |
 | A5 | 30 | 知识问答 |
+| A6 | 50 | 逻辑推理 |
 | B1 | 40 | 安全拒绝 |
 | B2 | 41 | 安全防护 |
 | B3 | 40 | 对抗鲁棒 |
 | B4 | 30 | 真实性与幻觉 |
 | B5-B8 | 166 | 进阶安全（多轮、伪合规、专业场景） |
 | C1-C4 | 50 | 复合能力探针 |
-| **合计** | **567** | 单轮 457 + 多轮组 110 |
+| **合计** | **627** | 单轮 517 + 多轮组 110 |
 
 ## 核心脚本
 
@@ -249,7 +250,7 @@ SQLite 表结构：
 
 ## 已验证的评测链路
 
-- MiniMax `MiniMax-M2.7` 已通过 Anthropic-compatible Provider 跑通 C2 smoke 题
+- MiniMax `MiniMax-M3` 已在 `QB-v1.0` 基线上跑通 `567` 题全量评测，并生成 Markdown 结果
 - 失败题 retry 创建新 run，canonical 汇总 root + retry 结果
 - 报告可按 canonical 结果生成
 - 前端新增模型接入 → 测试连通性 → 创建 run → 实时监控 → 生成报告 → 删除 run 全链路已验证
@@ -260,11 +261,15 @@ SQLite 表结构：
 |------|------|------|------|
 | `gsm8k_candidates.jsonl` | 7473 | A1 | 完整来源快照 |
 | `livecodebench_test_generation_candidates.jsonl` | 442 | A2 | 完整来源快照 |
+| `apps_livecodebench_coding_candidates.jsonl` | 12 | A2 | `QB-v1.1` 高难编程方法快照 |
+| `bigcode_evalplus_swebench_candidates.jsonl` | 12 | A2 | `QB-v1.1` 长代码/补丁推理方法快照 |
 | `ifeval_candidates.jsonl` | 541 | A3/C2/C3 | 完整来源快照 |
 | `livebench_instruction_candidates.jsonl` | 400 | A3/C2 | 完整来源快照 |
 | `squad_candidates.jsonl` | 10570 | A4 | 完整来源快照 |
 | `cnn_dailymail_candidates.jsonl` | 13368 | A4 | CNN + DailyMail 候选快照 |
 | `hotpotqa_candidates.jsonl` | 7405 | A4 | 多跳问答候选快照 |
+| `bbh_bbeh_logic_candidates.jsonl` | 12 | A6 | `QB-v1.1` 逻辑推理方法快照 |
+| `zebra_planbench_logic_candidates.jsonl` | 12 | A6 | `QB-v1.1` 约束/状态逻辑方法快照 |
 | `mmlu_pro_candidates.jsonl` | 12032 | A5 | 完整来源快照 |
 | `sorrybench_candidates.jsonl` | 9446 | B1 | 完整来源快照 |
 | `jbb_harmful_candidates.jsonl` | 100 | B1/B2 | harmful 候选快照 |

@@ -269,4 +269,4 @@ def select_round_robin(rows: list[dict], count: int) -> list[dict]:
 
 def infer_bank_version(items: list[dict]) -> str:
     versions = {item.get("version") for item in items}
-    return sorted(v for v in versions if v)[0] if versions else "QB-v1.0"
+    return sorted(v for v in versions if v)[-1] if versions else "QB-v1.1"

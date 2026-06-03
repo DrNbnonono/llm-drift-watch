@@ -21,11 +21,13 @@ class QuestionBankPipelineTests(unittest.TestCase):
     def test_generate_bank_counts(self):
         rewrites, items = generate_bank()
         self.assertEqual(len(rewrites), len(items))
-        self.assertEqual(len(items), 567)
+        self.assertEqual(len(items), 627)
         modules = {}
         for item in items:
             modules[item["module"]] = modules.get(item["module"], 0) + 1
         self.assertEqual(modules["A1"], 50)
+        self.assertEqual(modules["A2"], 50)
+        self.assertEqual(modules["A6"], 50)
         self.assertEqual(modules["B8"], 66)
         self.assertEqual(modules["C4"], 10)
 

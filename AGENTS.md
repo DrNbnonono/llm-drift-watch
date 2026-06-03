@@ -21,12 +21,12 @@
 |-------------|------|
 | `config/providers.json` | 非密钥模型配置镜像（由 SQLite 同步回写，勿手动编辑） |
 | `docs/` | 设计文档与蓝图 |
-| `final_bank_specs/generated/final_bank_items.jsonl` | 正式题库 QB-v1.0（567 题） |
+| `final_bank_specs/generated/final_bank_items.jsonl` | 正式题库 QB-v1.1（627 题） |
 | `frontend/` | React + Vite 前端 |
 | `frontend/src/App.jsx` | 主应用组件（含页面路由） |
 | `manifests/evaluation.sqlite` | 主运行态数据库（gitignore） |
 | `manifests/evaluation_runs/<run_id>/` | 单次 run 的镜像产物目录（gitignore） |
-| `normalized/` | 公开候选层（13 个来源的标准化候选题） |
+| `normalized/` | 公开候选层（17 个来源的标准化候选题） |
 | `output/` | Playwright 截图、调试输出（gitignore） |
 | `rewrite_drafts/generated/rewrite_drafts.jsonl` | 改写草案 |
 | `schema/` | JSON Schema 定义（evaluation_run / final_bank_item / item_score / question_candidate / rewrite_task_draft） |
@@ -46,7 +46,8 @@
 | `question_bank_runtime.py` | 题库运行时支持 |
 | `extract_public_sources.py` | 从公开来源提取并标准化候选题 |
 | `generate_formal_bank.py` | 从候选层生成改写草案和正式题库 |
-| `build_curated_candidates.py` | 候选题构建 |
+| `build_curated_candidates.py` | 早期候选题构建脚本 |
+| `build_qbv11_candidates.py` | `QB-v1.1` 的 A2/A6 方法快照构建脚本 |
 | `evaluate_minimax_bank.py` | 读取正式题库并调用 MiniMax 评测 |
 | `validate_with_minimax.py` | MiniMax 验证脚本 |
 | `validate_bank_artifacts.py` | 校验三层关键字段与产物完整性 |
@@ -237,7 +238,7 @@ cd "LLM Evaluation/question_bank_workspace"
 当前验证过的国内 Anthropic-compatible 入口：
 
 - Base URL: `https://api.minimax.chat/anthropic/v1`
-- 模型：`MiniMax-M2.7`
+- 模型：`MiniMax-M3`
 
 推荐的新增方式：
 
@@ -249,7 +250,7 @@ cd "LLM Evaluation/question_bank_workspace"
    - API 格式：`Anthropic-compatible`
    - 认证方式：`x_api_key`
    - 认证字段环境名：`MINIMAX_API_KEY`
-   - 真实请求模型名：`MiniMax-M2.7`
+   - 真实请求模型名：`MiniMax-M3`
 3. 可直接在弹窗里填写真实 API Key
 4. 保存后点击 `用此评测`
 
@@ -261,7 +262,7 @@ cd "LLM Evaluation/question_bank_workspace"
 
 - run_id: `20260530T082253Z-d2653b9b`
 - provider: `minimax_sqlite_verify`
-- model_alias: `minimax_m2_7_sqlite_verify`
+- model_alias: `model_conn_minimax_ui_live_minimax_ui_live_validation`
 - 题目：`C2-001`, `C2-002`
 
 结果：

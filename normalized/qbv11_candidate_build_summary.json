@@ -1,0 +1,30 @@
+[
+  {
+    "source_key": "bbh_bbeh_logic_curated",
+    "dataset": "benchmark-curated/bbh-bbeh-logic",
+    "split": "curated",
+    "output_file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/bbh_bbeh_logic_candidates.jsonl",
+    "count": 12
+  },
+  {
+    "source_key": "zebra_planbench_logic_curated",
+    "dataset": "benchmark-curated/zebra-planbench-logic",
+    "split": "curated",
+    "output_file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/zebra_planbench_logic_candidates.jsonl",
+    "count": 12
+  },
+  {
+    "source_key": "apps_livecodebench_coding_curated",
+    "dataset": "benchmark-curated/apps-livecodebench-coding",
+    "split": "curated",
+    "output_file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/apps_livecodebench_coding_candidates.jsonl",
+    "count": 12
+  },
+  {
+    "source_key": "bigcode_evalplus_swebench_curated",
+    "dataset": "benchmark-curated/bigcode-evalplus-swebench",
+    "split": "curated",
+    "output_file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/bigcode_evalplus_swebench_candidates.jsonl",
+    "count": 12
+  }
+]

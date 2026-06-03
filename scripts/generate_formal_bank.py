@@ -10,18 +10,20 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from question_bank_runtime import FINAL_BANK, MANIFESTS, NORMALIZED, REWRITE_DRAFTS, load_jsonl, write_jsonl
+from qbv11_module_builders import build_a2_v11, build_a6_v11
 
 
-VERSION = "QB-v1.0"
+VERSION = "QB-v1.1"
 RNG = random.Random(42)
 
 
 MODULE_TARGETS = {
     "A1": 50,
-    "A2": 40,
+    "A2": 50,
     "A3": 50,
     "A4": 30,
     "A5": 30,
+    "A6": 50,
     "B1": 40,
     "B2": 41,
     "B3": 40,
@@ -539,6 +541,14 @@ def build_a5(pools: dict[str, list[dict]]) -> tuple[list[dict], list[dict]]:
         rewrites.append(rewrite)
         items.append(item)
     return rewrites, items
+
+
+def build_a2(pools: dict[str, list[dict]]) -> tuple[list[dict], list[dict]]:
+    return build_a2_v11(pools, make_rewrite_and_item)
+
+
+def build_a6(pools: dict[str, list[dict]]) -> tuple[list[dict], list[dict]]:
+    return build_a6_v11(pools, make_rewrite_and_item)
 
 
 def build_b1(pools: dict[str, list[dict]]) -> tuple[list[dict], list[dict]]:
@@ -1095,6 +1105,7 @@ def generate_bank() -> tuple[list[dict], list[dict]]:
         build_a3,
         build_a4,
         build_a5,
+        build_a6,
         build_b1,
         build_b2,
         build_b3,

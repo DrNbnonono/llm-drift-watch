@@ -350,13 +350,14 @@ class BaseProvider:
             raise FileNotFoundError("curl")
         body = "" if payload is None else json.dumps(payload, ensure_ascii=False)
         headers = _build_auth_headers(self.provider, self.api_key)
+        connect_timeout = min(60, max(5, int(self.timeout)))
         config_lines = [
             f'url = "{url}"',
             f'request = "{method}"',
             "silent",
             "show-error",
             "fail-with-body",
-            f"connect-timeout = {min(15, max(1, int(self.timeout)))}",
+            f"connect-timeout = {connect_timeout}",
             f"max-time = {max(1, int(self.timeout))}",
         ]
         for key, value in headers.items():
