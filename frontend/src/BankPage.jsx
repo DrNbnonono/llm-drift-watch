@@ -1,11 +1,7 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
-
-const MODULE_OPTIONS = [
-  "A1", "A2", "A3", "A4", "A5", "A6",
-  "B1", "B2", "B3", "B4", "B5", "B6", "B7", "B8",
-  "C1", "C2", "C3", "C4",
-];
+import ResizableTable, { ResizableTh, ResizableTd } from "./components/ResizableTable.jsx";
 
 const STATUS_OPTIONS = [
   { value: "", label: "全部" },
@@ -50,12 +46,7 @@ const STATUS_CLASS = {
   retired: "status-retired",
 };
 
-const MODULE_TONE = {
-  A1: "module-A1", A2: "module-A2", A3: "module-A3", A4: "module-A4", A5: "module-A5", A6: "module-A6",
-  B1: "module-B1", B2: "module-B2", B3: "module-B3", B4: "module-B4",
-  B5: "module-B5", B6: "module-B6", B7: "module-B7", B8: "module-B8",
-  C1: "module-C1", C2: "module-C2", C3: "module-C3", C4: "module-C4",
-};
+const MODULE_TONE = {}; // populated from /api/dict/modules; legacy keys still resolved by `module-${code}`
 
 function createEmptyDraft() {
   return {
@@ -230,7 +221,8 @@ function IconSearch() {
   );
 }
 
-function BankFormModal({ open, mode, initial, busy, error, onClose, onSubmit }) {
+function BankFormModal({ open, mode, initial, busy, error, moduleOptions = [], onClose, onSubmit }) {
+  const { t } = useTranslation();
   const [draft, setDraft] = useState(() => fromBankItem(initial));
 
   useEffect(() => {
@@ -304,7 +296,7 @@ function BankFormModal({ open, mode, initial, busy, error, onClose, onSubmit }) 
           <div className="modal-body">
             <div className="bank-form-grid">
               <div className="bank-form-field">
-                <label>Question ID</label>
+                <label>{t("forms.questionId")}</label>
                 <input
                   value={draft.question_id}
                   disabled={isEdit}
@@ -315,7 +307,7 @@ function BankFormModal({ open, mode, initial, busy, error, onClose, onSubmit }) 
                 {isEdit ? <div className="bank-form-hint">Question ID 在编辑时不可修改。</div> : null}
               </div>
               <div className="bank-form-field">
-                <label>Version</label>
+                <label>{t("forms.version")}</label>
                 <input
                   value={draft.version}
                   onChange={(event) => updateField("version", event.target.value)}
@@ -323,13 +315,17 @@ function BankFormModal({ open, mode, initial, busy, error, onClose, onSubmit }) 
                 />
               </div>
               <div className="bank-form-field">
-                <label>Module</label>
+                <label>{t("forms.module")}</label>
                 <select value={draft.module} onChange={(event) => updateField("module", event.target.value)}>
-                  {MODULE_OPTIONS.map((m) => <option key={m} value={m}>{m}</option>)}
+                  {(moduleOptions.length ? moduleOptions : [{code:"A1"},{code:"A2"}]).map((m) => (
+                    <option key={m.code} value={m.code}>
+                      {m.code}{m.display_name ? ` · ${m.display_name}` : ""}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="bank-form-field">
-                <label>Subtype</label>
+                <label>{t("forms.subtype")}</label>
                 <input
                   value={draft.subtype}
                   onChange={(event) => updateField("subtype", event.target.value)}
@@ -430,7 +426,7 @@ function BankFormModal({ open, mode, initial, busy, error, onClose, onSubmit }) 
               </div>
 
               <div className="bank-form-field">
-                <label>Module Quota Tag</label>
+                <label>{t("forms.moduleQuotaTag")}</label>
                 <input
                   value={draft.module_quota_tag}
                   onChange={(event) => updateField("module_quota_tag", event.target.value)}
@@ -587,6 +583,7 @@ function briefText(text, maxLen = 90) {
 }
 
 function BankDetail({ item, onAction, busy, canMutate }) {
+  const { t } = useTranslation();
   if (!item) {
     return (
       <div className="bank-detail">
@@ -608,7 +605,7 @@ function BankDetail({ item, onAction, busy, canMutate }) {
           {briefText(item.prompt_template || item.turn_script?.[0]?.content_template || "未提供题面预览", 90)}
         </div>
         <div className="bank-detail-subtitle">
-          <span className={`bank-cell-module ${MODULE_TONE[item.module] || ""}`}>
+          <span className={`bank-cell-module module-${item.module || "default"}`}>
             <span className="module-mark">{item.module}</span>
             {item.subtype || "—"} · {item.item_format}
           </span>
@@ -643,7 +640,7 @@ function BankDetail({ item, onAction, busy, canMutate }) {
             <span className="bank-section-note">meta</span>
           </div>
           <div className="bank-kv-grid">
-            <div className="bank-kv"><span className="bank-kv-key">Version</span><span className="bank-kv-value mono-id">{item.version || "—"}</span></div>
+            <div className="bank-kv"><span className="bank-kv-key">{t("forms.version")}</span><span className="bank-kv-value mono-id">{item.version || "—"}</span></div>
             <div className="bank-kv"><span className="bank-kv-key">Drift Role</span><span className="bank-kv-value">{item.drift_role || "—"}</span></div>
             <div className="bank-kv"><span className="bank-kv-key">Difficulty</span><span className="bank-kv-value">{item.difficulty || "—"}</span></div>
             <div className="bank-kv"><span className="bank-kv-key">Quota Tag</span><span className="bank-kv-value mono-id">{item.module_quota_tag || "—"}</span></div>
@@ -718,6 +715,7 @@ function buildQuery(params) {
 }
 
 export default function BankPage({ apiFetch, systemPaths, onToast, canMutate = true }) {
+  const { t } = useTranslation();
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -743,16 +741,16 @@ export default function BankPage({ apiFetch, systemPaths, onToast, canMutate = t
   const [selectedId, setSelectedId] = useState(null);
   const [selectedIds, setSelectedIds] = useState([]);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [moduleDict, setModuleDict] = useState([]);
   const requestSeq = useRef(0);
 
   const [formState, setFormState] = useState({ open: false, mode: "create", item: null, busy: false, error: null });
   const [confirmState, setConfirmState] = useState({ open: false, kind: null, item: null, items: [], busy: false });
 
   const availableSubtypes = useMemo(() => {
-    const subtypes = facets.subtypes || [];
-    if (!filters.module) return subtypes;
-    return subtypes.filter((s) => (s.modules || []).includes(filters.module));
-  }, [facets.subtypes, filters.module]);
+    // 始终展示全量 subtype,跨 module 通用;后端会按 (module, subtype) 双键过滤
+    return facets.subtypes || [];
+  }, [facets.subtypes]);
 
   async function loadFacets() {
     try {
@@ -801,7 +799,24 @@ export default function BankPage({ apiFetch, systemPaths, onToast, canMutate = t
 
   useEffect(() => {
     loadFacets();
+    loadModuleDict();
   }, []);
+
+  async function loadModuleDict() {
+    try {
+      const data = await apiFetch("/api/dict/modules?include_inactive=true");
+      const items = (data?.items || []).slice().sort((a, b) => {
+        const orderA = a.sort_order ?? 0;
+        const orderB = b.sort_order ?? 0;
+        if (orderA !== orderB) return orderA - orderB;
+        return String(a.code).localeCompare(String(b.code));
+      });
+      setModuleDict(items);
+    } catch (err) {
+      // 静默失败:继续用 fallback 列表
+      setModuleDict([]);
+    }
+  }
 
   useEffect(() => {
     loadRows();
@@ -819,10 +834,11 @@ export default function BankPage({ apiFetch, systemPaths, onToast, canMutate = t
   ]);
 
   useEffect(() => {
-    if (filters.subtype && !availableSubtypes.some((s) => s.value === filters.subtype)) {
+    // 仅当所选 subtype 在任何模块里都不存在时才清空
+    if (filters.subtype && !(facets.subtypes || []).some((s) => s.value === filters.subtype)) {
       setFilters((prev) => ({ ...prev, subtype: "" }));
     }
-  }, [availableSubtypes, filters.subtype]);
+  }, [facets.subtypes, filters.subtype]);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -1041,7 +1057,7 @@ export default function BankPage({ apiFetch, systemPaths, onToast, canMutate = t
 
       <div className="bank-toolbar">
         <div className="bank-filter-cluster">
-          <span className="bank-filter-label">Version</span>
+          <span className="bank-filter-label">{t("forms.version")}</span>
           <div className="bank-pill-group" role="tablist">
             <button
               type="button"
@@ -1065,7 +1081,7 @@ export default function BankPage({ apiFetch, systemPaths, onToast, canMutate = t
         </div>
 
         <div className="bank-filter-cluster">
-          <span className="bank-filter-label">Status</span>
+          <span className="bank-filter-label">{t("forms.status")}</span>
           <div className="bank-pill-group" role="tablist">
             {STATUS_OPTIONS.map((opt) => {
               const count = opt.value ? (facets.qa_statuses || []).find((s) => s.value === opt.value)?.count || 0 : null;
@@ -1086,7 +1102,7 @@ export default function BankPage({ apiFetch, systemPaths, onToast, canMutate = t
         </div>
 
         <div className="bank-filter-cluster">
-          <span className="bank-filter-label">Module</span>
+          <span className="bank-filter-label">{t("forms.module")}</span>
           <select
             className="bank-search"
             style={{ padding: "0.4rem 0.7rem" }}
@@ -1099,7 +1115,7 @@ export default function BankPage({ apiFetch, systemPaths, onToast, canMutate = t
         </div>
 
         <div className="bank-filter-cluster">
-          <span className="bank-filter-label">Subtype</span>
+          <span className="bank-filter-label">{t("forms.subtype")}</span>
           <select
             className="bank-search"
             style={{ padding: "0.4rem 0.7rem" }}
@@ -1113,7 +1129,7 @@ export default function BankPage({ apiFetch, systemPaths, onToast, canMutate = t
         </div>
 
         <div className="bank-filter-cluster">
-          <span className="bank-filter-label">Format</span>
+          <span className="bank-filter-label">{t("forms.format")}</span>
           <select
             className="bank-search"
             style={{ padding: "0.4rem 0.7rem" }}
@@ -1194,23 +1210,29 @@ export default function BankPage({ apiFetch, systemPaths, onToast, canMutate = t
         ) : null}
         {rows.length ? (
           <div style={{ overflowX: "auto" }}>
-            <table className="bank-table">
+            <ResizableTable
+              storageKey="bank-table-v1"
+              className="bank-table"
+              defaultWidths={[3, 6.5, 5.5, 4.5, 11, 6.5, 8]}
+            >
+              {({ widths, beginDrag }) => (
+                <>
               <thead>
                 <tr>
-                  {canMutate ? <th><input type="checkbox" checked={allVisibleSelected} onChange={(event) => {
+                  {canMutate ? <th style={{ width: `${widths[0]}rem` }}><input type="checkbox" checked={allVisibleSelected} onChange={(event) => {
                     if (event.target.checked) {
                       setSelectedIds((prev) => Array.from(new Set([...prev, ...rows.map((it) => it.question_id)])));
                     } else {
                       setSelectedIds((prev) => prev.filter((qid) => !rows.some((it) => it.question_id === qid)));
                     }
                   }} /></th> : null}
-                  <th style={{ width: "6.5rem" }}>ID</th>
-                  <th style={{ width: "5.5rem" }}>Version</th>
-                  <th style={{ width: "4.5rem" }}>Module</th>
-                  <th style={{ width: "11rem" }}>Subtype</th>
-                  <th>题面预览</th>
-                  <th style={{ width: "6.5rem" }}>状态</th>
-                  <th style={{ width: "8rem" }}>Format</th>
+                  <ResizableTh width={widths[1]} onBeginDrag={(e) => beginDrag(e, 1)}>ID</ResizableTh>
+                  <ResizableTh width={widths[2]} onBeginDrag={(e) => beginDrag(e, 2)}>{t("forms.version")}</ResizableTh>
+                  <ResizableTh width={widths[3]} onBeginDrag={(e) => beginDrag(e, 3)}>{t("forms.module")}</ResizableTh>
+                  <ResizableTh width={widths[4]} onBeginDrag={(e) => beginDrag(e, 4)}>{t("forms.subtype")}</ResizableTh>
+                  <ResizableTh width={widths[5]} onBeginDrag={(e) => beginDrag(e, 5)}>题面预览</ResizableTh>
+                  <ResizableTh width={widths[6]} onBeginDrag={(e) => beginDrag(e, 6)}>状态</ResizableTh>
+                  <ResizableTh width={widths[7]} onBeginDrag={(e) => beginDrag(e, 7)}>{t("forms.format")}</ResizableTh>
                 </tr>
               </thead>
               <tbody>
@@ -1241,26 +1263,28 @@ export default function BankPage({ apiFetch, systemPaths, onToast, canMutate = t
                           />
                         </td>
                       ) : null}
-                      <td className="bank-cell-id" style={{ width: "6.5rem" }}>{item.question_id}</td>
-                      <td style={{ width: "5.5rem" }}>{item.version || "—"}</td>
-                      <td style={{ width: "4.5rem" }}>
-                        <span className={`bank-cell-module ${MODULE_TONE[item.module] || ""}`}>
+                      <ResizableTd width={widths[1]} className="bank-cell-id">{item.question_id}</ResizableTd>
+                      <ResizableTd width={widths[2]}>{item.version || "—"}</ResizableTd>
+                      <ResizableTd width={widths[3]}>
+                        <span className={`bank-cell-module module-${item.module || "default"}`}>
                           <span className="module-mark">{item.module}</span>
                         </span>
-                      </td>
-                      <td style={{ width: "11rem", wordBreak: "break-word" }}>{item.subtype || "—"}</td>
-                      <td>
+                      </ResizableTd>
+                      <ResizableTd width={widths[4]} style={{ wordBreak: "break-word" }}>{item.subtype || "—"}</ResizableTd>
+                      <ResizableTd width={widths[5]}>
                         <div className="bank-cell-prompt">
                           {briefText(item.prompt_template || item.turn_script?.[0]?.content_template, 200)}
                         </div>
-                      </td>
-                      <td style={{ width: "6.5rem" }}><StatusPill status={item.qa_status || "ready"} /></td>
-                      <td style={{ width: "8rem" }}>{item.item_format}</td>
+                      </ResizableTd>
+                      <ResizableTd width={widths[6]}><StatusPill status={item.qa_status || "ready"} /></ResizableTd>
+                      <ResizableTd width={widths[7]}>{item.item_format}</ResizableTd>
                     </tr>
                   );
                 })}
               </tbody>
-            </table>
+                </>
+              )}
+            </ResizableTable>
           </div>
         ) : null}
       </div>
@@ -1295,6 +1319,7 @@ export default function BankPage({ apiFetch, systemPaths, onToast, canMutate = t
         initial={formState.item}
         busy={formState.busy}
         error={formState.error}
+        moduleOptions={moduleDict}
         onClose={() => setFormState({ open: false, mode: "create", item: null, busy: false, error: null })}
         onSubmit={handleFormSubmit}
       />

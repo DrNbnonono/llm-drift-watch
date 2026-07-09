@@ -100,6 +100,17 @@
       "headers_template": {},
       "model_lookup_mode": "skip",
       "enabled": true
+    },
+    {
+      "provider_id": "provider_conn_probe_vendor_probe",
+      "display_name": "probe-vendor",
+      "protocol": "mock",
+      "base_url": "http://localhost",
+      "auth_scheme": "none",
+      "auth_env": "",
+      "headers_template": {},
+      "model_lookup_mode": "skip",
+      "enabled": true
     }
   ],
   "models": [
@@ -171,6 +182,16 @@
       "default_timeout": 60,
       "default_max_tokens": 131072,
       "supports_multi_turn": true,
+      "enabled": true
+    },
+    {
+      "model_alias": "model_conn_probe_vendor_probe",
+      "provider_id": "provider_conn_probe_vendor_probe",
+      "display_name": "probe",
+      "model_name": "mock",
+      "default_timeout": 5,
+      "default_max_tokens": 16,
+      "supports_multi_turn": false,
       "enabled": true
     }
   ]

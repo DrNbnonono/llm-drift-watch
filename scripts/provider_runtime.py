@@ -26,6 +26,10 @@ SUPPORTED_PROTOCOLS = {"anthropic_compatible", "openai_compatible", "gemini", "m
 SUPPORTED_AUTH_SCHEMES = {"x_api_key", "bearer", "x_goog_api_key", "none"}
 SUPPORTED_MODEL_LOOKUP_MODES = {"skip", "get_single", "list_contains"}
 SECRET_KEY_ENV = "QUESTION_BANK_SECRET_KEY"
+# 明文存储 API Key 的开关。默认 True(明文),仅用于本地开发控制台。
+# 设置 ``QUESTION_BANK_PLAIN_API_KEYS=false`` 强制启用 Fernet 加密。
+PLAIN_API_KEYS_ENV = "QUESTION_BANK_PLAIN_API_KEYS"
+DEFAULT_PLAIN_API_KEYS = True
 
 
 @dataclass(frozen=True)
@@ -71,17 +75,169 @@ def _derive_fernet() -> Fernet:
     return Fernet(key)
 
 
+def _generate_random_key() -> str:
+    """Generate a strong random master key (32 bytes urlsafe)."""
+    import secrets
+    return secrets.token_urlsafe(32)
+
+
+def _load_dotenv_fallback() -> bool:
+    """Best-effort ``.env`` loader without requiring python-dotenv.
+
+    Returns True if the env var of interest was found in ``.env`` and was set.
+    Lines beginning with ``#`` are ignored; lines not matching ``KEY=VALUE`` are skipped.
+    """
+    try:
+        env_path = ROOT / ".env"
+        if not env_path.exists():
+            return False
+        loaded = False
+        for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            if not key:
+                continue
+            if key == SECRET_KEY_ENV and not os.environ.get(key, "").strip():
+                os.environ[key] = value
+                loaded = True
+        return loaded
+    except Exception:
+        return False
+
+
+def ensure_master_key(auto_generate: bool = True, emit: "callable | None" = None, load_dotenv: bool = True) -> dict[str, Any]:
+    """Ensure ``QUESTION_BANK_SECRET_KEY`` is set; auto-generate if missing.
+
+    Args:
+        auto_generate: when True and env var is unset, generate a fresh key,
+            persist it to ``.env`` (next to the repo root), and inject it into
+            ``os.environ``. Set False in tests to opt out.
+        emit: optional callable(str) used for logging. Defaults to ``print``.
+        load_dotenv: when True, attempt to read ``.env`` first to pick up an
+            existing key. Pass False to force a fully pristine process (e.g.
+            strict startup).
+
+    Returns a small status dict for the caller / startup banner.
+    """
+    if load_dotenv:
+        _load_dotenv_fallback()
+    existing = os.environ.get(SECRET_KEY_ENV, "").strip()
+    if existing:
+        return {"generated": False, "source": "env", "path": None}
+
+    if not auto_generate:
+        return {"generated": False, "source": "missing", "path": None}
+
+    new_key = _generate_random_key()
+    env_path = ROOT / ".env"
+    line = f'{SECRET_KEY_ENV}="{new_key}"\n'
+    written = False
+    try:
+        env_path.parent.mkdir(parents=True, exist_ok=True)
+        existing_text = env_path.read_text(encoding="utf-8") if env_path.exists() else ""
+        if SECRET_KEY_ENV not in existing_text:
+            with env_path.open("a", encoding="utf-8") as fh:
+                if existing_text and not existing_text.endswith("\n"):
+                    fh.write("\n")
+                fh.write(line)
+        os.environ[SECRET_KEY_ENV] = new_key
+        written = True
+    except Exception as exc:  # noqa: BLE001
+        # Still inject for this process so the dev session works.
+        os.environ[SECRET_KEY_ENV] = new_key
+        if emit:
+            emit(f"[master-key] auto-generated (in-memory only, fs write failed: {exc})")
+        return {
+            "generated": True,
+            "source": "auto",
+            "path": None,
+            "persisted": False,
+        }
+
+    if emit:
+        emit(f"[master-key] auto-generated and persisted to {env_path}")
+    return {"generated": True, "source": "auto", "path": str(env_path), "persisted": written}
+
+
+def is_plain_api_keys() -> bool:
+    raw = os.environ.get(PLAIN_API_KEYS_ENV, "").strip().lower()
+    if raw in ("0", "false", "no", "off"):
+        return False
+    if raw in ("1", "true", "yes", "on"):
+        return True
+    return DEFAULT_PLAIN_API_KEYS
+
+
 def encrypt_secret(value: str) -> str:
+    if is_plain_api_keys():
+        return value or ""
+    require_master_key_or_raise()
     return _derive_fernet().encrypt(value.encode("utf-8")).decode("utf-8")
 
 
 def decrypt_secret(value: str | None) -> str:
+    if value is None:
+        return ""
+    if is_plain_api_keys():
+        return value
     if not value:
         return ""
+    require_master_key_or_raise()
     try:
         return _derive_fernet().decrypt(value.encode("utf-8")).decode("utf-8")
     except InvalidToken as exc:
         raise ProviderError("Stored API key cannot be decrypted with current master key", "model_validation_failed") from exc
+
+
+def is_master_key_configured() -> bool:
+    return bool(os.environ.get(SECRET_KEY_ENV, "").strip())
+
+
+def require_master_key_or_raise(auto_generate: bool = False) -> None:
+    if is_master_key_configured():
+        return
+    if auto_generate:
+        status = ensure_master_key(auto_generate=True)
+        if status.get("generated") or is_master_key_configured():
+            return
+    raise ProviderError(
+        f"Missing secret master key env: {SECRET_KEY_ENV}",
+        "master_key_required",
+    )
+
+
+def set_master_key(new_value: str, persist: bool = True) -> dict[str, Any]:
+    new_value = (new_value or "").strip()
+    if not new_value:
+        raise ProviderError(
+            f"{SECRET_KEY_ENV} must be a non-empty string",
+            "master_key_invalid",
+        )
+    os.environ[SECRET_KEY_ENV] = new_value
+    persisted = False
+    env_path: str | None = None
+    if persist:
+        env_path = str(ROOT / ".env")
+        try:
+            existing = ROOT.joinpath(".env").read_text(encoding="utf-8") if (ROOT / ".env").exists() else ""
+            lines = [ln for ln in existing.splitlines() if not ln.lstrip().startswith(f"{SECRET_KEY_ENV}=")]
+            sanitized = new_value.replace('"', '\\"')
+            lines.append(f'{SECRET_KEY_ENV}="{sanitized}"')
+            (ROOT / ".env").write_text("\n".join(lines) + "\n", encoding="utf-8")
+            persisted = True
+        except Exception:
+            persisted = False
+    return {
+        "configured": True,
+        "persisted": persisted,
+        "path": env_path,
+    }
 
 
 def classify_error_message(message: str) -> str:

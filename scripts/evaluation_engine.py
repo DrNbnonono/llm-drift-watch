@@ -637,6 +637,10 @@ class EvaluationRunService:
         }
 
     def get_system_paths(self) -> dict[str, str]:
+        from provider_runtime import ROOT as _PROVIDER_ROOT, SECRET_KEY_ENV, is_plain_api_keys
+        configured = bool(os.environ.get("QUESTION_BANK_SECRET_KEY", "").strip())
+        env_path = _PROVIDER_ROOT / ".env"
+        plain_mode = is_plain_api_keys()
         return {
             "providers_config_path": str(self.registry.config_path),
             "evaluation_db_path": str(self.store.db_path),
@@ -645,11 +649,60 @@ class EvaluationRunService:
             "evaluation_runs_root": str(RUNS_DIR),
             "reports_root": str(RUNS_DIR),
             "secret_master_env": "QUESTION_BANK_SECRET_KEY",
-            "secret_master_configured": "true" if bool(os.environ.get("QUESTION_BANK_SECRET_KEY", "").strip()) else "false",
+            "secret_master_configured": "true" if configured else "false",
+            "secret_master_missing": "false" if configured else "true",
+            "secret_master_key_path": env_path.as_posix(),
+            "secret_master_can_auto_generate": "true" if not configured else "false",
+            "secret_master_variable": SECRET_KEY_ENV,
+            "secret_master_plain_mode": "true" if plain_mode else "false",
+            "secret_master_storage_mode": "plain" if plain_mode else "encrypted",
         }
 
     def get_bank_facets(self) -> dict[str, Any]:
-        return self.store.get_bank_facets()
+        facets = self.store.get_bank_facets()
+        try:
+            modules = self.list_dict("module", include_inactive=True)
+            facets["module_meta"] = [
+                {
+                    "code": m["code"],
+                    "display_name": m["display_name"],
+                    "parent_group": m.get("parent_group", "capability"),
+                    "sort_order": m.get("sort_order", 0),
+                    "is_active": bool(m.get("is_active", 1)),
+                }
+                for m in modules
+            ]
+        except Exception:
+            facets["module_meta"] = []
+        return facets
+
+    # ------------------------------------------------------------------
+    # Dictionary CRUD (Phase 3)
+    # ------------------------------------------------------------------
+    def list_dict(self, kind: str, include_inactive: bool = True) -> list[dict[str, Any]]:
+        rows = self.store.list_dict(kind, include_inactive=include_inactive)
+        for row in rows:
+            row["is_active"] = bool(row.get("is_active", 0))
+        return rows
+
+    def get_dict(self, kind: str, code: str) -> dict[str, Any] | None:
+        row = self.store.get_dict(kind, code)
+        if row:
+            row["is_active"] = bool(row.get("is_active", 0))
+        return row
+
+    def upsert_dict(self, kind: str, payload: dict[str, Any]) -> dict[str, Any]:
+        result = self.store.upsert_dict(kind, payload)
+        if result:
+            result["is_active"] = bool(result.get("is_active", 0))
+        return result or {}
+
+    def delete_dict(self, kind: str, code: str, hard: bool = False) -> bool:
+        return self.store.delete_dict(kind, code, hard=hard)
+
+    def bulk_upsert_dict(self, kind: str, rows: list[dict[str, Any]]) -> dict[str, Any]:
+        count = self.store.bulk_upsert_dict(kind, rows)
+        return {"count": count}
 
     def _enrich_item_row(self, row: dict[str, Any]) -> dict[str, Any]:
         enriched = dict(row)

@@ -1,20 +1,27 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
 import BankPage from "./BankPage.jsx";
+import SystemSettings from "./SystemSettings.jsx";
+import RunReportPage from "./RunReportPage.jsx";
+import RunItemsPage from "./RunItemsPage.jsx";
+import TaxonomyPage from "./TaxonomyPage.jsx";
 
 const API_BASE =
   import.meta.env.VITE_API_BASE ||
   `${window.location.protocol}//${window.location.hostname}:8000`;
 
-const RUN_VIEWS = [
-  { key: "create", label: "运行创建" },
-  { key: "monitor", label: "实时监控" },
-  { key: "items", label: "逐题结果" },
-  { key: "timeline", label: "多轮时间线" },
-  { key: "bank", label: "题库管理" },
-  { key: "models", label: "模型接入" },
-  { key: "history", label: "历史 Runs" },
-  { key: "reports", label: "报告" },
+const RUN_VIEW_KEYS = [
+  { key: "create" },
+  { key: "monitor" },
+  { key: "items" },
+  { key: "timeline" },
+  { key: "bank" },
+  { key: "taxonomy" },
+  { key: "models" },
+  { key: "history" },
+  { key: "reports" },
+  { key: "settings" },
 ];
 
 const MODULE_OPTIONS = [
@@ -58,11 +65,21 @@ async function apiFetch(path, options = {}) {
     if (!response.ok) {
       const text = await response.text();
       let detail = text || `HTTP ${response.status}`;
+      let parsed = null;
       try {
-        const parsed = JSON.parse(text);
-        detail = parsed?.detail || detail;
+        parsed = JSON.parse(text);
+        detail = stringifyDetail(parsed?.detail, detail);
       } catch {
         // Keep raw text fallback.
+      }
+      if (response.status === 503 && parsed && typeof parsed === "object" && parsed.detail && typeof parsed.detail === "object" && parsed.detail.code === "master_key_required") {
+        // eslint-disable-next-line no-console
+        console.warn("[master-key] required by backend, prompt user to configure");
+        try {
+          window.dispatchEvent(new CustomEvent("questionbank:master-key-required"));
+        } catch (e) {
+          /* noop */
+        }
       }
       throw new Error(String(detail));
     }
@@ -133,6 +150,23 @@ function slugifyAlias(text) {
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "")
     .slice(0, 64);
+}
+
+function stringifyDetail(detail, fallback) {
+  if (detail === null || detail === undefined) return fallback;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail.map((item) => stringifyDetail(item, String(item))).join("; ");
+  }
+  if (typeof detail === "object") {
+    if (typeof detail.message === "string") return detail.message;
+    try {
+      return JSON.stringify(detail);
+    } catch {
+      return String(detail);
+    }
+  }
+  return String(detail);
 }
 
 function humanizeError(message) {
@@ -704,6 +738,7 @@ function DetailCard({ title, item, timelineData }) {
 }
 
 function App() {
+  const { t } = useTranslation();
   const bankRequestSeq = useRef(0);
   const runRequestSeq = useRef(0);
   const [view, setView] = useState("create");
@@ -721,6 +756,7 @@ function App() {
   const [bankTotal, setBankTotal] = useState(0);
   const [runItemsTotal, setRunItemsTotal] = useState(0);
   const [bankFacets, setBankFacets] = useState({ total: 0, modules: [], subtypes: [], item_formats: [] });
+  const [moduleDict, setModuleDict] = useState([]);
   const [systemPaths, setSystemPaths] = useState(null);
   const [selectedBankQuestionId, setSelectedBankQuestionId] = useState(null);
   const [error, setError] = useState("");
@@ -822,6 +858,28 @@ function App() {
     loadSystemPaths();
     loadBankFacets();
     loadBankItems();
+  }, []);
+
+  useEffect(() => {
+    const handler = () => {
+      setNotice("后端要求先配置 master key，已跳转到系统设置页。");
+      setView("settings");
+    };
+    window.addEventListener("questionbank:master-key-required", handler);
+    return () => window.removeEventListener("questionbank:master-key-required", handler);
+  }, []);
+
+  async function loadModuleDict() {
+    try {
+      const data = await apiFetch("/api/dict/modules?include_inactive=true");
+      setModuleDict(data?.items || []);
+    } catch (err) {
+      setModuleDict([]);
+    }
+  }
+
+  useEffect(() => {
+    loadModuleDict();
   }, []);
 
   const runIsActive = useMemo(() => {
@@ -1755,6 +1813,34 @@ function App() {
     return Object.entries(counter).sort((a, b) => b[1] - a[1]);
   }, [runItems]);
 
+  // Phase 5: pass helper components + module options to extracted pages
+  const moduleOptionsForFilters = useMemo(() => {
+    if (moduleDict && moduleDict.length) {
+      return moduleDict.map((m) => ({ code: m.code, display_name: m.display_name }));
+    }
+    return MODULE_OPTIONS.map((m) => ({ code: m, display_name: m }));
+  }, [moduleDict]);
+
+  const runItemsHelpers = {
+    SectionTitle,
+    PaginationBar,
+    EmptyState,
+    DetailCard,
+    briefText,
+    formatValue,
+    setView,
+  };
+  const reportPageHelpers = {
+    SectionTitle,
+    PathList,
+    ScoreCard,
+    ReportCharts,
+    MarkdownPreview,
+    formatValue,
+    RunArtifactStatus,
+    EmptyState,
+  };
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -1765,13 +1851,13 @@ function App() {
           <div className="brand-note">Research-grade evaluation cockpit for multi-provider model testing.</div>
         </div>
         <nav className="nav">
-          {RUN_VIEWS.map((entry) => (
+          {RUN_VIEW_KEYS.map((entry) => (
             <button
               key={entry.key}
               className={view === entry.key ? "nav-item active" : "nav-item"}
               onClick={() => setView(entry.key)}
             >
-              {entry.label}
+              {t(`nav.${entry.key}`)}
             </button>
           ))}
         </nav>
@@ -1780,10 +1866,6 @@ function App() {
       <main className="content content-stage">
         <header className="hero hero-editorial">
           <div className="hero-copy">
-            <div className="hero-kicker-row">
-              <span className="hero-tag">Active View</span>
-              <span className="hero-tag hero-tag-ghost">{RUN_VIEWS.find((item) => item.key === view)?.label || "-"}</span>
-            </div>
             <div className="hero-title">多模型测评系统</div>
             <div className="hero-subtitle">围绕模型接入、评测执行、逐题诊断与报告可视化构建的一体化评测工作台。</div>
             <div className="hero-endpoint">Endpoint · {API_BASE}</div>
@@ -2001,101 +2083,43 @@ function App() {
         ) : null}
 
         {view === "items" ? (
-          <section className="panel">
-            <SectionTitle title="逐题结果" meta={`当前页 ${runItems.length} / 总计 ${runItemsTotal}`} />
-            <div className="filters-row">
-              <label>
-                模块
-                <select value={itemFilters.module} onChange={(event) => setItemFilters((prev) => ({ ...prev, module: event.target.value }))}>
-                  <option value="">全部</option>
-                  {MODULE_OPTIONS.map((module) => <option key={module} value={module}>{module}</option>)}
-                </select>
-              </label>
-              <label>
-                状态
-                <select value={itemFilters.status} onChange={(event) => setItemFilters((prev) => ({ ...prev, status: event.target.value }))}>
-                  <option value="">全部</option>
-                  <option value="ok">ok</option>
-                  <option value="failed">failed</option>
-                </select>
-              </label>
-              <label>
-                失败类型
-                <input value={itemFilters.failure_type} onChange={(event) => setItemFilters((prev) => ({ ...prev, failure_type: event.target.value }))} placeholder="read_timeout / http_529..." />
-              </label>
-              <label>
-                题号
-                <input value={itemFilters.question_id} onChange={(event) => setItemFilters((prev) => ({ ...prev, question_id: event.target.value }))} placeholder="A1-001" />
-              </label>
-              <label className="filter-search">
-                关键词
-                <input value={itemFilters.search} onChange={(event) => setItemFilters((prev) => ({ ...prev, search: event.target.value }))} placeholder="题面 / subtype / failure" />
-              </label>
-              <label className="checkbox-label">
-                <input type="checkbox" checked={itemFilters.canonical_only} onChange={(event) => setItemFilters((prev) => ({ ...prev, canonical_only: event.target.checked }))} />
-                Canonical
-              </label>
-              <div className="inline-actions">
-                <button className="action-button secondary" type="button" onClick={() => selectedRunId && refreshRun(selectedRunId)}>刷新结果</button>
-                <button className="action-button secondary" type="button" onClick={() => setView("timeline")} disabled={!selectedRunItem}>查看时间线</button>
-              </div>
-            </div>
-            <PaginationBar
-              page={itemPage}
-              pageSize={itemPageSize}
-              total={runItemsTotal}
-              onPageChange={setItemPage}
-              onPageSizeChange={(size) => {
-                setItemPageSize(size);
-                setItemPage(1);
-              }}
-            />
-            <div className="items-layout">
-              <div className="items-list">
-                {loadingRunItems ? <div className="muted-text">正在加载逐题结果…</div> : null}
-                {!loadingRunItems && !runItems.length ? (
-                  <EmptyState
-                    title="当前筛选下没有逐题结果"
-                    description="可以清空筛选条件，或先在历史 Runs 中选择一个已有 run。"
-                  />
-                ) : (
-                  <div className="table-shell">
-                    <table className="data-table">
-                      <thead>
-                        <tr>
-                          <th>Question</th>
-                          <th>Module</th>
-                          <th>Subtype</th>
-                          <th>题面预览</th>
-                          <th>Status</th>
-                          <th>Score</th>
-                          <th>Failure</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {runItems.map((item) => (
-                          <tr
-                            key={`${item.question_id}-${item.attempt_run_id}-${item.source_run_id}`}
-                            className={selectedRunItem?.question_id === item.question_id ? "row-active" : ""}
-                            onClick={() => setSelectedQuestionId(item.question_id)}
-                          >
-                            <td className="mono">{item.question_id}</td>
-                            <td>{item.module}</td>
-                            <td>{item.bank_item?.subtype || "-"}</td>
-                            <td>{briefText(item.bank_item?.prompt_template || item.bank_item?.turn_script?.[0]?.content_template)}</td>
-                            <td>{item.status}</td>
-                            <td>{formatValue(item.primary_score)}</td>
-                            <td>{item.failure_type || "-"}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-              <DetailCard title="题目详情" item={selectedRunItem} timelineData={timelineData} />
-            </div>
-          </section>
+          <RunItemsPage
+            runItems={runItems}
+            runItemsTotal={runItemsTotal}
+            loadingRunItems={loadingRunItems}
+            itemFilters={itemFilters}
+            setItemFilters={setItemFilters}
+            itemPage={itemPage}
+            itemPageSize={itemPageSize}
+            setItemPage={setItemPage}
+            setItemPageSize={setItemPageSize}
+            selectedRunId={selectedRunId}
+            selectedRunItem={selectedRunItem}
+            moduleOptions={moduleOptionsForFilters}
+            helpers={runItemsHelpers}
+            onRefreshRun={refreshRun}
+            onSelectQuestion={(qid) => setSelectedQuestionId(qid)}
+          />
+        ) : null}
+
+        {view === "runItems" && selectedRunId ? (
+          <RunItemsPage
+            runItems={runItems}
+            runItemsTotal={runItemsTotal}
+            loadingRunItems={loadingRunItems}
+            itemFilters={itemFilters}
+            setItemFilters={setItemFilters}
+            itemPage={itemPage}
+            itemPageSize={itemPageSize}
+            setItemPage={setItemPage}
+            setItemPageSize={setItemPageSize}
+            selectedRunId={selectedRunId}
+            selectedRunItem={selectedRunItem}
+            moduleOptions={moduleOptionsForFilters}
+            helpers={runItemsHelpers}
+            onRefreshRun={refreshRun}
+            onSelectQuestion={(qid) => setSelectedQuestionId(qid)}
+          />
         ) : null}
 
         {view === "timeline" ? (
@@ -2543,24 +2567,29 @@ function App() {
                           aria-label="全选 runs"
                         />
                       </th>
-                      <th style={{ width: "12rem" }}>Run ID</th>
-                      <th style={{ width: "4rem" }}>Kind</th>
-                      <th style={{ width: "9rem" }}>Provider</th>
-                      <th style={{ width: "9rem" }}>Model</th>
-                      <th style={{ width: "6rem" }}>Status</th>
-                      <th style={{ width: "7rem" }}>Processed / Total</th>
-                      <th style={{ width: "7rem" }}>Succeeded / Failed</th>
-                      <th style={{ width: "5rem" }}>Report</th>
-                      <th style={{ width: "6rem" }}>Canonical</th>
-                      <th style={{ width: "5rem" }}>路径</th>
-                      <th style={{ width: "8rem" }}>操作</th>
+                      <th style={{ width: "12rem" }}>{t("run.columns.runId")}</th>
+                      <th style={{ width: "4rem" }}>{t("run.columns.kind")}</th>
+                      <th style={{ width: "9rem" }}>{t("run.columns.provider")}</th>
+                      <th style={{ width: "9rem" }}>{t("run.columns.model")}</th>
+                      <th style={{ width: "6rem" }}>{t("run.columns.status")}</th>
+                      <th style={{ width: "7rem" }}>{t("run.columns.processed")}</th>
+                      <th style={{ width: "7rem" }}>{t("run.columns.succeeded")}</th>
+                      <th style={{ width: "5rem" }}>{t("run.columns.report")}</th>
+                      <th style={{ width: "6rem" }}>{t("run.columns.canonical")}</th>
+                      <th style={{ width: "5rem" }}>{t("run.columns.path")}</th>
+                      <th style={{ width: "8rem" }}>{t("run.columns.actions")}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {runs.map((run) => (
                       <tr
                         key={run.run_id}
-                        className={selectedRunId === run.run_id ? "row-active" : ""}
+                        className={selectedRunId === run.run_id ? "row-active clickable-row" : "clickable-row"}
+                        onDoubleClick={() => {
+                          setSelectedRunId(run.run_id);
+                          setSelectedQuestionId(null);
+                          setView("runReport");
+                        }}
                         onClick={() => {
                           setSelectedRunId(run.run_id);
                           setSelectedQuestionId(null);
@@ -2638,8 +2667,8 @@ function App() {
                       </div>
                       <div className="modal-body">
                         <div className="compact-meta-panel">
-                          <div className="compact-meta-line"><span>Provider</span><strong>{selectedRun.provider_id || "-"}</strong></div>
-                          <div className="compact-meta-line"><span>Model</span><strong>{selectedRun.model_alias || selectedRun.model_name || "-"}</strong></div>
+                          <div className="compact-meta-line"><span>{t("run.columns.provider")}</span><strong>{selectedRun.provider_id || "-"}</strong></div>
+                          <div className="compact-meta-line"><span>{t("run.columns.model")}</span><strong>{selectedRun.model_alias || selectedRun.model_name || "-"}</strong></div>
                           <div className="compact-meta-line"><span>Processed</span><strong>{selectedRunCounts.processed} / {selectedRunCounts.total}</strong></div>
                           <div className="compact-meta-line"><span>Succeeded</span><strong>{selectedRunCounts.succeeded}</strong></div>
                           <div className="compact-meta-line"><span>Failed</span><strong>{selectedRunCounts.failed}</strong></div>
@@ -2678,77 +2707,48 @@ function App() {
         ) : null}
 
         {view === "reports" ? (
-          <section className="panel report-page">
-            <SectionTitle title="报告预览" meta={report?.run_id || "选择一个已完成 run"} />
-            <PathList title="报告目录" paths={{ reports_root: systemPaths?.reports_root }} />
-            <div className="report-page-layout">
-              <div className="detail-card report-browser-card">
-                <SectionTitle title="可预览报告" meta={`${reportCandidates.length} 个已完成 run`} />
-                <div className="config-list report-run-list">
-                  {reportCandidates.slice(0, 24).map((run) => (
-                    <button
-                      key={run.run_id}
-                      type="button"
-                      className={(report?.run_id === run.run_id || activeReportRunId === run.run_id) ? "config-row report-run-row active" : "config-row report-run-row"}
-                      onClick={() => handlePreviewReport(run.run_id, { generateIfMissing: !run.report_ready })}
-                    >
-                      <div className="config-row-main">
-                        <div className="config-row-title mono">{run.run_id}</div>
-                        <div className="config-row-subtitle">{run.model_alias || run.model_name || "-"} / {run.execution_status || run.status || "-"}</div>
-                        <div className="config-chip-row">
-                          <RunArtifactStatus ready={run.report_ready} label="报告" />
-                          <RunArtifactStatus ready={run.canonical_ready} label="Canonical" />
-                        </div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
+          <RunReportPage
+            report={report}
+            reportCandidates={reportCandidates}
+            activeReportRunId={activeReportRunId}
+            reportSummaryMetrics={reportSummaryMetrics}
+            loadingReport={loadingReport}
+            systemPaths={systemPaths}
+            apiFetch={apiFetch}
+            onBack={() => setView("history")}
+            onPreviewReport={handlePreviewReport}
+            helpers={reportPageHelpers}
+          />
+        ) : null}
 
-              <div className="stack-sections">
-                {report ? (
-                  <>
-                    <div className="report-hero-surface">
-                      <div className="report-score-grid">
-                        <ScoreCard title="Capability" value={formatValue(reportSummaryMetrics.capability_score ?? 0)} tone="warm" />
-                        <ScoreCard title="Safety" value={formatValue(reportSummaryMetrics.safety_composite_score ?? 0)} tone="neutral" />
-                        <ScoreCard title="Probe" value={formatValue(reportSummaryMetrics.probe_score ?? 0)} tone="cool" />
-                        <ScoreCard title="Overall" value={formatValue(reportSummaryMetrics.overall_macro_score ?? 0)} tone="neutral" />
-                      </div>
-                      <div className="meta-row report-meta-row">
-                        <span>Run: {report.run_id}</span>
-                        <span>Path: {report.report_path}</span>
-                      </div>
-                    </div>
+        {view === "runReport" ? (
+          <RunReportPage
+            report={report}
+            reportCandidates={reportCandidates}
+            activeReportRunId={activeReportRunId}
+            reportSummaryMetrics={reportSummaryMetrics}
+            loadingReport={loadingReport}
+            systemPaths={systemPaths}
+            apiFetch={apiFetch}
+            onBack={() => setView("history")}
+            onPreviewReport={handlePreviewReport}
+            helpers={reportPageHelpers}
+          />
+        ) : null}
 
-                    <div className="report-preview-grid">
-                      <div className="detail-card report-chart-stage">
-                        <SectionTitle title="结构化图表" meta="默认展示 canonical 汇总口径" />
-                        <ReportCharts reportData={report} />
-                      </div>
-                      <div className="detail-card report-preview-card">
-                        <SectionTitle title="文档预览" meta="Markdown 实时预览" />
-                        <MarkdownPreview content={report.content} />
-                      </div>
-                    </div>
+        {view === "settings" ? (
+          <SystemSettings
+            apiFetch={apiFetch}
+            systemPaths={systemPaths}
+            onCopied={(message) => setNotice(message)}
+          />
+        ) : null}
 
-                    {loadingReport ? <div className="muted-text">正在生成或读取报告…</div> : null}
-                    <details className="report-raw-block">
-                      <summary>查看原始 Markdown 报告</summary>
-                      <pre className="report-view">{report.content}</pre>
-                    </details>
-                  </>
-                ) : (
-                  <EmptyState
-                    title="还没有加载报告"
-                    description="你可以从左侧选择一个已完成 run 直接预览；如果该 run 还没有生成报告，系统会自动补生成并加载。"
-                    actionLabel={selectedRunId ? "为当前 Run 生成并预览" : undefined}
-                    onAction={selectedRunId ? () => handlePreviewReport(selectedRunId, { generateIfMissing: true }) : undefined}
-                  />
-                )}
-              </div>
-            </div>
-          </section>
+        {view === "taxonomy" ? (
+          <TaxonomyPage
+            apiFetch={apiFetch}
+            onToast={(message) => setNotice(message)}
+          />
         ) : null}
       </main>
     </div>

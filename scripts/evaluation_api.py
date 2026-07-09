@@ -5,11 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from evaluation_engine import EvaluationRunService
+from provider_runtime import ProviderError, is_master_key_configured, set_master_key
 
 
 service = EvaluationRunService()
@@ -107,6 +108,54 @@ def system_paths() -> dict[str, Any]:
     return service.get_system_paths()
 
 
+class MasterKeyUpdateRequest(BaseModel):
+    key: str = Field(..., min_length=8, description="New QUESTION_BANK_SECRET_KEY")
+    persist: bool = True
+
+
+class MasterKeyRotateRequest(BaseModel):
+    persist: bool = True
+
+
+def _provider_error_to_http(exc: ProviderError) -> HTTPException:
+    code = 503 if exc.failure_type in {"master_key_required", "master_key_invalid"} else 400
+    return HTTPException(status_code=code, detail={
+        "code": exc.failure_type,
+        "message": str(exc),
+    })
+
+
+@app.post("/api/system/master-key/rotate")
+def rotate_master_key(payload: MasterKeyRotateRequest = MasterKeyRotateRequest()) -> dict[str, Any]:
+    import secrets
+    new_key = secrets.token_urlsafe(32)
+    try:
+        status = set_master_key(new_key, persist=payload.persist)
+    except ProviderError as exc:
+        raise _provider_error_to_http(exc) from exc
+    return {
+        "configured": status["configured"],
+        "persisted": status["persisted"],
+        "path": status["path"],
+        "key": new_key,
+    }
+
+
+@app.put("/api/system/master-key")
+def update_master_key(payload: MasterKeyUpdateRequest) -> dict[str, Any]:
+    try:
+        status = set_master_key(payload.key, persist=payload.persist)
+    except ProviderError as exc:
+        raise _provider_error_to_http(exc) from exc
+    service.registry.reload()
+    return {
+        "configured": status["configured"],
+        "persisted": status["persisted"],
+        "path": status["path"],
+        "key": payload.key if status["persisted"] else None,
+    }
+
+
 @app.get("/api/providers")
 def list_providers() -> dict[str, Any]:
     return {
@@ -125,6 +174,8 @@ def list_model_connections() -> dict[str, Any]:
 def create_model_connection(payload: ModelConnectionUpsertRequest) -> dict[str, Any]:
     try:
         return service.registry.create_model_connection(payload.model_dump(exclude_none=True))
+    except ProviderError as exc:  # noqa: BLE001
+        raise _provider_error_to_http(exc) from exc
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -135,6 +186,8 @@ def update_model_connection(connection_id: str, payload: ModelConnectionUpsertRe
         data = payload.model_dump(exclude_none=True)
         data.pop("connection_id", None)
         return service.registry.update_model_connection(connection_id, data)
+    except ProviderError as exc:  # noqa: BLE001
+        raise _provider_error_to_http(exc) from exc
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -152,6 +205,8 @@ def delete_model_connection(connection_id: str) -> dict[str, Any]:
 def test_model_connection(connection_id: str) -> dict[str, Any]:
     try:
         return service.registry.test_model_connection(connection_id)
+    except ProviderError as exc:  # noqa: BLE001
+        raise _provider_error_to_http(exc) from exc
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -461,3 +516,73 @@ def get_report(run_id: str) -> dict[str, Any]:
         return service.get_report_payload(run_id)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="run not found") from exc
+
+
+# --------------------------------------------------------------------
+# Dictionary CRUD (Phase 3): /api/dict/{modules,subtypes,quota_tags}
+# --------------------------------------------------------------------
+_DICT_KIND_SEGMENT = {"module": "module", "modules": "module", "subtype": "subtype", "subtypes": "subtype", "quota_tag": "quota_tag", "quota_tags": "quota_tag"}
+
+
+def _resolve_dict_kind(segment: str) -> str:
+    kind = _DICT_KIND_SEGMENT.get(segment.lower())
+    if not kind:
+        raise HTTPException(status_code=404, detail=f"unknown dict kind: {segment}")
+    return kind
+
+
+@app.get("/api/dict/{kind}")
+def list_dict_entries(kind: str, include_inactive: bool = Query(default=True)) -> dict[str, Any]:
+    real_kind = _resolve_dict_kind(kind)
+    return {"items": service.list_dict(real_kind, include_inactive=include_inactive)}
+
+
+@app.get("/api/dict/{kind}/{code}")
+def get_dict_entry(kind: str, code: str) -> dict[str, Any]:
+    real_kind = _resolve_dict_kind(kind)
+    row = service.get_dict(real_kind, code)
+    if not row:
+        raise HTTPException(status_code=404, detail="not found")
+    return row
+
+
+@app.post("/api/dict/{kind}")
+async def upsert_dict_entry(kind: str, request: Request) -> dict[str, Any]:
+    real_kind = _resolve_dict_kind(kind)
+    payload = await request.json()
+    if not payload.get("code"):
+        raise HTTPException(status_code=400, detail="code is required")
+    try:
+        return service.upsert_dict(real_kind, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"validation: {exc}") from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"{type(exc).__name__}: {exc}") from exc
+
+
+@app.put("/api/dict/{kind}/{code}")
+async def update_dict_entry(kind: str, code: str, request: Request) -> dict[str, Any]:
+    real_kind = _resolve_dict_kind(kind)
+    payload = await request.json()
+    payload = dict(payload)
+    payload["code"] = code
+    return service.upsert_dict(real_kind, payload)
+
+
+@app.delete("/api/dict/{kind}/{code}")
+def delete_dict_entry(kind: str, code: str, hard: bool = Query(default=False)) -> dict[str, Any]:
+    real_kind = _resolve_dict_kind(kind)
+    deleted = service.delete_dict(real_kind, code, hard=hard)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="not found")
+    return {"deleted": True, "code": code, "hard": hard}
+
+
+@app.post("/api/dict/{kind}/bulk")
+async def bulk_upsert_dict(kind: str, request: Request) -> dict[str, Any]:
+    real_kind = _resolve_dict_kind(kind)
+    payload = await request.json()
+    rows = payload.get("items") or []
+    if not isinstance(rows, list):
+        raise HTTPException(status_code=400, detail="items must be a list")
+    return service.bulk_upsert_dict(real_kind, rows)

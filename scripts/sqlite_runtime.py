@@ -221,6 +221,42 @@ class SQLiteStore:
                 CREATE INDEX IF NOT EXISTS idx_bank_items_module ON bank_items(module);
                 CREATE INDEX IF NOT EXISTS idx_bank_items_subtype ON bank_items(subtype);
                 CREATE INDEX IF NOT EXISTS idx_bank_items_item_format ON bank_items(item_format);
+
+                CREATE TABLE IF NOT EXISTS module_dict (
+                    code TEXT PRIMARY KEY,
+                    display_name TEXT NOT NULL,
+                    description TEXT NOT NULL DEFAULT '',
+                    sort_order INTEGER NOT NULL DEFAULT 0,
+                    parent_group TEXT NOT NULL DEFAULT 'capability',
+                    color_token TEXT NOT NULL DEFAULT '',
+                    is_active INTEGER NOT NULL DEFAULT 1,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE INDEX IF NOT EXISTS idx_module_dict_parent ON module_dict(parent_group);
+
+                CREATE TABLE IF NOT EXISTS subtype_dict (
+                    code TEXT PRIMARY KEY,
+                    module_code TEXT NOT NULL,
+                    display_name TEXT NOT NULL,
+                    description TEXT NOT NULL DEFAULT '',
+                    sort_order INTEGER NOT NULL DEFAULT 0,
+                    is_active INTEGER NOT NULL DEFAULT 1,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (module_code) REFERENCES module_dict(code) ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS idx_subtype_dict_module ON subtype_dict(module_code);
+
+                CREATE TABLE IF NOT EXISTS quota_tag_dict (
+                    code TEXT PRIMARY KEY,
+                    module_code TEXT,
+                    display_name TEXT NOT NULL,
+                    description TEXT NOT NULL DEFAULT '',
+                    sort_order INTEGER NOT NULL DEFAULT 0,
+                    is_active INTEGER NOT NULL DEFAULT 1,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (module_code) REFERENCES module_dict(code) ON DELETE SET NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_quota_tag_dict_module ON quota_tag_dict(module_code);
                 """
             )
             self._ensure_column(conn, "runs", "connection_id", "TEXT")
@@ -231,6 +267,25 @@ class SQLiteStore:
             self._ensure_column(conn, "bank_items", "qa_status", "TEXT NOT NULL DEFAULT 'ready'")
             conn.execute("UPDATE bank_items SET qa_status = 'ready' WHERE qa_status IS NULL OR qa_status = ''")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_items_qa_status ON bank_items(qa_status)")
+            self._ensure_column(conn, "bank_items", "difficulty", "TEXT")
+            self._ensure_column(conn, "bank_items", "drift_role", "TEXT")
+            self._ensure_column(conn, "bank_items", "module_quota_tag", "TEXT")
+            self._ensure_column(conn, "bank_items", "notes", "TEXT")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_items_difficulty ON bank_items(difficulty)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_items_drift_role ON bank_items(drift_role)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_items_module_quota_tag ON bank_items(module_quota_tag)")
+            # Backfill: copy from full_item_json for any rows missing the new columns
+            for col in ("difficulty", "drift_role", "module_quota_tag", "notes"):
+                nulls = conn.execute(
+                    f"SELECT question_id, full_item_json FROM bank_items WHERE {col} IS NULL OR {col} = ''"
+                ).fetchall()
+                for row in nulls:
+                    item = json_loads(row["full_item_json"], {})
+                    value = item.get(col) or ""
+                    conn.execute(
+                        f"UPDATE bank_items SET {col} = ? WHERE question_id = ?",
+                        (str(value), row["question_id"]),
+                    )
             rows = conn.execute(
                 "SELECT question_id, full_item_json FROM bank_items WHERE version IS NULL OR version = ''"
             ).fetchall()
@@ -927,3 +982,82 @@ class SQLiteStore:
             "is_retry_attempt": bool(row["is_retry_attempt"]),
             "canonical_selected": bool(row["canonical_selected"]),
         }
+
+    # ------------------------------------------------------------------
+    # Module / Subtype / QuotaTag dictionary CRUD (Phase 3)
+    # ------------------------------------------------------------------
+    _DICT_KINDS = {
+        "module": ("module_dict", ("code", "display_name", "description", "sort_order", "parent_group", "color_token", "is_active"), "code"),
+        "subtype": ("subtype_dict", ("code", "module_code", "display_name", "description", "sort_order", "is_active"), "code"),
+        "quota_tag": ("quota_tag_dict", ("code", "module_code", "display_name", "description", "sort_order", "is_active"), "code"),
+    }
+
+    def _dict_kind(self, kind: str) -> tuple[str, tuple[str, ...], str]:
+        normalized = (kind or "").strip().lower()
+        if normalized not in self._DICT_KINDS:
+            raise ValueError(f"unknown dict kind: {kind}")
+        table, columns, pk = self._DICT_KINDS[normalized]
+        return table, columns, pk
+
+    def list_dict(self, kind: str, include_inactive: bool = True) -> list[dict[str, Any]]:
+        table, _, _ = self._dict_kind(kind)
+        where = "" if include_inactive else " WHERE is_active = 1"
+        with self._connect() as conn:
+            rows = conn.execute(
+                f"SELECT * FROM {table}{where} ORDER BY sort_order, code"
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def get_dict(self, kind: str, code: str) -> dict[str, Any] | None:
+        table, _, _ = self._dict_kind(kind)
+        with self._connect() as conn:
+            row = conn.execute(f"SELECT * FROM {table} WHERE code = ?", (code,)).fetchone()
+        return dict(row) if row else None
+
+    def upsert_dict(self, kind: str, row: dict[str, Any]) -> dict[str, Any]:
+        table, columns, pk = self._dict_kind(kind)
+        clean: dict[str, Any] = {}
+        for col in columns:
+            if col == "is_active":
+                value = row.get(col, 1)
+                clean[col] = 1 if value in (1, True, "1", "true", "True", 1.0) else 0
+            elif col in ("sort_order",):
+                value = row.get(col, 0)
+                clean[col] = int(value) if value not in (None, "") else 0
+            else:
+                value = row.get(col, "")
+                clean[col] = "" if value is None else str(value).strip()
+        if not clean.get(pk):
+            raise ValueError(f"{kind} {pk} is required")
+        with self._connect() as conn:
+            placeholders = ", ".join(["?"] * len(columns))
+            update_cols = ", ".join([f"{col}=excluded.{col}" for col in columns if col != pk])
+            conn.execute(
+                f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({placeholders}) "
+                f"ON CONFLICT({pk}) DO UPDATE SET {update_cols}, updated_at=CURRENT_TIMESTAMP",
+                tuple(clean[col] for col in columns),
+            )
+        result = self.get_dict(kind, clean[pk])
+        return result or clean
+
+    def delete_dict(self, kind: str, code: str, hard: bool = False) -> bool:
+        table, _, _ = self._dict_kind(kind)
+        with self._connect() as conn:
+            if hard:
+                cursor = conn.execute(f"DELETE FROM {table} WHERE code = ?", (code,))
+            else:
+                cursor = conn.execute(
+                    f"UPDATE {table} SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE code = ?",
+                    (code,),
+                )
+        return cursor.rowcount > 0
+
+    def bulk_upsert_dict(self, kind: str, rows: list[dict[str, Any]]) -> int:
+        count = 0
+        for row in rows:
+            self.upsert_dict(kind, row)
+            count += 1
+        return count
+
+    def get_module_display_names(self) -> dict[str, str]:
+        return {row["code"]: row["display_name"] for row in self.list_dict("module", include_inactive=True)}
