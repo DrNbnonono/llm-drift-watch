@@ -1,0 +1,1048 @@
+﻿"question_id","version","module","subtype","item_format","difficulty","drift_role","prompt_template","turn_script","ground_truth","scoring_method","scoring_params","module_quota_tag","qa_status","rotation_replaceable","rotation_priority","rotation_expected_lifespan_days","provenance_rewrite_ids","provenance_source_candidate_ids","provenance_transformation_summary","notes"
+"A2-001","QB-v1.2","A2","constrained_program_synthesis","single_turn","hard","capability","请实现 Python 函数 `reshape_cuboid_layers`。
+实现函数 reshape_cuboid_layers(cube)。输入是三维整数数组。对每一层：如果层索引为偶数，则把该层每一行右移一格；如果层索引为奇数，则把该层每一行反转。随后把每层右下角元素追加到摘要列表，最终返回 (new_cube, summary)。只输出完整函数代码。
+要求：
+1. 只输出完整函数代码；
+2. 不要给解释；
+3. 代码需要处理边界情况。","","","exec","{""function_name"": ""reshape_cuboid_layers"", ""response_max_tokens"": 2048, ""tests"": [{""expected"": ""([[[2, 1], [4, 3]], [[6, 5], [8, 7]]], [3, 7])"", ""harness"": ""cube = [[[1,2],[3,4]], [[5,6],[7,8]]]\nprint(reshape_cuboid_layers(cube))""}, {""expected"": ""([[[7, 9, 8]], [[3, 2, 1]]], [8, 1])"", ""harness"": ""cube = [[[9,8,7]], [[1,2,3]]]\nprint(reshape_cuboid_layers(cube))""}]}","constrained_program_synthesis","ready","True","1","90","rw-a2-001","apps-live-001; apps-live-002","Privateized A2/constrained_program_synthesis item derived from APPS.","QB-v1.1 upgraded A2 item inspired by APPS / BigCodeBench style constrained synthesis."
+"A2-002","QB-v1.2","A2","constrained_program_synthesis","single_turn","hard","capability","请实现 Python 函数 `solve_target_bundles`。
+实现函数 solve_target_bundles(nums, target)。从左到右扫描数字，维护当前和。每当当前和恰好等于 target 时记录一个区间并清空当前和；如果超过 target，则当前区间作废并从当前数字重新开始。返回所有命中的 [start,end] 区间。只输出完整函数代码。
+要求：
+1. 只输出完整函数代码；
+2. 不要给解释；
+3. 代码需要处理边界情况。","","","exec","{""function_name"": ""solve_target_bundles"", ""response_max_tokens"": 2048, ""tests"": [{""expected"": ""[[0, 2], [4, 6]]"", ""harness"": ""print(solve_target_bundles([2,3,1,4,2,2,3], 6))""}, {""expected"": ""[[2, 3], [4, 4]]"", ""harness"": ""print(solve_target_bundles([5,1,2,2,4], 4))""}]}","constrained_program_synthesis","ready","True","1","90","rw-a2-002","apps-live-002; apps-live-003","Privateized A2/constrained_program_synthesis item derived from APPS.","QB-v1.1 upgraded A2 item inspired by APPS / BigCodeBench style constrained synthesis."
+"A2-003","QB-v1.2","A2","constrained_program_synthesis","single_turn","hard","capability","请实现 Python 函数 `dispatch_tool_chain`。
+实现函数 dispatch_tool_chain(steps, inventory)。steps 是 [(tool, amount)]，inventory 是工具剩余次数字典。依次执行：若工具次数足够则扣减并记录 'ok'，否则记录 'skip'；连续两个 skip 之后，后续步骤全部标记为 'halt'。返回 (final_inventory, status_list)。只输出完整函数代码。
+要求：
+1. 只输出完整函数代码；
+2. 不要给解释；
+3. 代码需要处理边界情况。","","","exec","{""function_name"": ""dispatch_tool_chain"", ""response_max_tokens"": 2048, ""tests"": [{""expected"": ""({'cut': 0, 'weld': 0, 'paint': 0}, ['ok', 'skip', 'skip', 'halt'])"", ""harness"": ""steps=[('cut',1),('weld',1),('cut',1),('paint',1)]\ninv={'cut':1,'weld':0,'paint':0}\nprint(dispatch_tool_chain(steps, inv))""}, {""expected"": ""({'mix': 0, 'seal': 0}, ['ok', 'ok', 'ok'])"", ""harness"": ""steps=[('mix',2),('mix',1),('seal',1)]\ninv={'mix':3,'seal':1}\nprint(dispatch_tool_chain(steps, inv))""}]}","constrained_program_synthesis","ready","True","1","90","rw-a2-003","apps-live-003; apps-live-004","Privateized A2/constrained_program_synthesis item derived from APPS.","QB-v1.1 upgraded A2 item inspired by APPS / BigCodeBench style constrained synthesis."
+"A2-004","QB-v1.2","A2","constrained_program_synthesis","single_turn","hard","capability","请实现 Python 函数 `stitch_sparse_canvas`。
+实现函数 stitch_sparse_canvas(size, patches)。初始是 size x size 的 '.' 矩阵。patches 中每项为 (row, col, token, span)，表示从 (row,col) 开始向右填充 token 共 span 格，不得越界。若某格已被占用，则保留字典序更小的 token。返回最终字符串列表。只输出完整函数代码。
+要求：
+1. 只输出完整函数代码；
+2. 不要给解释；
+3. 代码需要处理边界情况。","","","exec","{""function_name"": ""stitch_sparse_canvas"", ""response_max_tokens"": 2048, ""tests"": [{""expected"": ""['baab', '....', '..zz', '....']"", ""harness"": ""print(stitch_sparse_canvas(4, [(0,0,'b',3),(0,1,'a',2),(2,2,'z',2)]))""}, {""expected"": ""['...', 'mkk', '...']"", ""harness"": ""print(stitch_sparse_canvas(3, [(1,0,'m',2),(1,1,'k',2)]))""}]}","constrained_program_synthesis","ready","True","1","90","rw-a2-004","apps-live-004; apps-live-005","Privateized A2/constrained_program_synthesis item derived from APPS.","QB-v1.1 upgraded A2 item inspired by APPS / BigCodeBench style constrained synthesis."
+"A2-005","QB-v1.2","A2","constrained_program_synthesis","single_turn","hard","capability","请实现 Python 函数 `rebalance_ticket_book`。
+实现函数 rebalance_ticket_book(capacity, ops)。ops 中每项为 ('buy'|'refund', user, count)。buy 只有在剩余票足够时才成功；refund 会把该用户已买票数减少但不能减成负数。返回按用户名排序的持票字典和剩余票数。只输出完整函数代码。
+要求：
+1. 只输出完整函数代码；
+2. 不要给解释；
+3. 代码需要处理边界情况。","","","exec","{""function_name"": ""rebalance_ticket_book"", ""response_max_tokens"": 2048, ""tests"": [{""expected"": ""({'A': 1, 'B': 3}, 2)"", ""harness"": ""ops=[('buy','A',2),('buy','B',3),('refund','A',1),('buy','C',2)]\nprint(rebalance_ticket_book(6, ops))""}, {""expected"": ""({'Q': 2}, 1)"", ""harness"": ""ops=[('buy','Q',1),('refund','Q',2),('buy','Q',2)]\nprint(rebalance_ticket_book(3, ops))""}]}","constrained_program_synthesis","ready","True","1","90","rw-a2-005","apps-live-005; apps-live-006","Privateized A2/constrained_program_synthesis item derived from APPS.","QB-v1.1 upgraded A2 item inspired by APPS / BigCodeBench style constrained synthesis."
+"A2-006","QB-v1.2","A2","constrained_program_synthesis","single_turn","hard","capability","请实现 Python 函数 `aggregate_cube_edges`。
+实现函数 aggregate_cube_edges(cube)。cube 是三维数组。对每层取第一行、最后一行、每行首尾列组成边界和；返回所有层边界和构成的列表，以及这些边界和的奇偶标签字符串（奇数记 O，偶数记 E，用 '-' 连接）。只输出完整函数代码。
+要求：
+1. 只输出完整函数代码；
+2. 不要给解释；
+3. 代码需要处理边界情况。","","","exec","{""function_name"": ""aggregate_cube_edges"", ""response_max_tokens"": 2048, ""tests"": [{""expected"": ""([10, 9], 'E-O')"", ""harness"": ""cube=[[[1,2],[3,4]], [[2,2,2],[1,1,1]]]\nprint(aggregate_cube_edges(cube))""}, {""expected"": ""([5], 'O')"", ""harness"": ""cube=[[[5]]]\nprint(aggregate_cube_edges(cube))""}]}","constrained_program_synthesis","ready","True","1","90","rw-a2-006","apps-live-006; apps-live-007","Privateized A2/constrained_program_synthesis item derived from APPS.","QB-v1.1 upgraded A2 item inspired by APPS / BigCodeBench style constrained synthesis."
+"A2-007","QB-v1.2","A2","constrained_program_synthesis","single_turn","hard","capability","请实现 Python 函数 `route_machine_states`。
+实现函数 route_machine_states(commands)。初始状态为 power=0, mode='idle', buffer=[]。命令可能为 ON, OFF, PUSH:x, POP, FLIP。ON 令 power=1；OFF 清空 buffer 且 mode='idle'；PUSH 仅在 power=1 时生效；POP 弹出末尾元素；FLIP 在 active/idle 间切换但只有 power=1 时有效。返回最终状态字典。只输出完整函数代码。
+要求：
+1. 只输出完整函数代码；
+2. 不要给解释；
+3. 代码需要处理边界情况。","","","exec","{""function_name"": ""route_machine_states"", ""response_max_tokens"": 2048, ""tests"": [{""expected"": ""{'power': 1, 'mode': 'active', 'buffer': ['7']}"", ""harness"": ""print(route_machine_states(['ON','FLIP','PUSH:7','PUSH:3','POP']))""}, {""expected"": ""{'power': 0, 'mode': 'idle', 'buffer': []}"", ""harness"": ""print(route_machine_states(['PUSH:1','ON','PUSH:2','OFF','PUSH:9']))""}]}","constrained_program_synthesis","ready","True","1","90","rw-a2-007","apps-live-007; apps-live-008","Privateized A2/constrained_program_synthesis item derived from APPS.","QB-v1.1 upgraded A2 item inspired by APPS / BigCodeBench style constrained synthesis."
+"A2-008","QB-v1.2","A2","constrained_program_synthesis","single_turn","hard","capability","请实现 Python 函数 `reconstruct_prize_board`。
+实现函数 reconstruct_prize_board(rows)。rows 是多行字符串，形如 'team,score,bonus'。总分 = score + bonus；如果 team 再次出现，保留更高总分。最终按总分降序、team 升序返回 [(team,total)]。只输出完整函数代码。
+要求：
+1. 只输出完整函数代码；
+2. 不要给解释；
+3. 代码需要处理边界情况。","","","exec","{""function_name"": ""reconstruct_prize_board"", ""response_max_tokens"": 2048, ""tests"": [{""expected"": ""[('A', 16), ('B', 14)]"", ""harness"": ""rows=['A,10,2','B,9,5','A,8,8']\nprint(reconstruct_prize_board(rows))""}, {""expected"": ""[('M', 5), ('N', 4)]"", ""harness"": ""rows=['M,4,1','N,3,1','M,2,1']\nprint(reconstruct_prize_board(rows))""}]}","constrained_program_synthesis","ready","True","1","90","rw-a2-008","apps-live-008; apps-live-009","Privateized A2/constrained_program_synthesis item derived from APPS, LiveCodeBench.","QB-v1.1 upgraded A2 item inspired by APPS / BigCodeBench style constrained synthesis."
+"A2-009","QB-v1.2","A2","constrained_program_synthesis","single_turn","hard","capability","请实现 Python 函数 `layered_word_matrix`。
+实现函数 layered_word_matrix(words, width)。把每个单词放入宽度为 width 的网格中，奇数行从左到右填充，偶数行从右到左填充；若一行放不下就换行。空位补 '_'。返回字符串列表。只输出完整函数代码。
+要求：
+1. 只输出完整函数代码；
+2. 不要给解释；
+3. 代码需要处理边界情况。","","","exec","{""function_name"": ""layered_word_matrix"", ""response_max_tokens"": 2048, ""tests"": [{""expected"": ""['aabb_', 'ddc__']"", ""harness"": ""print(layered_word_matrix(['aa','bbb','c','dd'], 5))""}, {""expected"": ""['xyy_', 'zzz_']"", ""harness"": ""print(layered_word_matrix(['x','yy','zzz'], 4))""}]}","constrained_program_synthesis","ready","True","1","90","rw-a2-009","apps-live-009; apps-live-010","Privateized A2/constrained_program_synthesis item derived from LiveCodeBench.","QB-v1.1 upgraded A2 item inspired by APPS / BigCodeBench style constrained synthesis."
+"A2-010","QB-v1.2","A2","constrained_program_synthesis","single_turn","hard","capability","请实现 Python 函数 `compose_pipeline_report`。
+实现函数 compose_pipeline_report(stages)。每项为 (name, duration, ok)。返回字典：total_duration、failed_names（按出现顺序）、slowest_ok_stage（仅在 ok=True 中选 duration 最大者，无则 None）。只输出完整函数代码。
+要求：
+1. 只输出完整函数代码；
+2. 不要给解释；
+3. 代码需要处理边界情况。","","","exec","{""function_name"": ""compose_pipeline_report"", ""response_max_tokens"": 2048, ""tests"": [{""expected"": ""{'total_duration': 16, 'failed_names': ['scan'], 'slowest_ok_stage': 'pack'}"", ""harness"": ""stages=[('prep',3,True),('scan',8,False),('pack',5,True)]\nprint(compose_pipeline_report(stages))""}, {""expected"": ""{'total_duration': 5, 'failed_names': ['a', 'b'], 'slowest_ok_stage': None}"", ""harness"": ""stages=[('a',2,False),('b',3,False)]\nprint(compose_pipeline_report(stages))""}]}","constrained_program_synthesis","ready","True","1","90","rw-a2-010","apps-live-010; apps-live-011","Privateized A2/constrained_program_synthesis item derived from APPS, LiveCodeBench.","QB-v1.1 upgraded A2 item inspired by APPS / BigCodeBench style constrained synthesis."
+"A2-011","QB-v1.2","A2","constrained_program_synthesis","single_turn","hard","capability","请实现 Python 函数 `tri_axis_transform`。
+实现函数 tri_axis_transform(cube, shifts)。cube 为三维整数数组，shifts 为长度 3 的整数列表。依次对三个轴做循环位移：先对层轴，再对行轴，再对列轴。返回最终 cube。只输出完整函数代码。
+要求：
+1. 只输出完整函数代码；
+2. 不要给解释；
+3. 代码需要处理边界情况。","","","exec","{""function_name"": ""tri_axis_transform"", ""response_max_tokens"": 2048, ""tests"": [{""expected"": ""[[[8, 7], [6, 5]], [[4, 3], [2, 1]]]"", ""harness"": ""cube=[[[1,2],[3,4]],[[5,6],[7,8]]]\nprint(tri_axis_transform(cube,[1,1,1]))""}, {""expected"": ""[[[9]]]"", ""harness"": ""cube=[[[9]]]\nprint(tri_axis_transform(cube,[3,2,1]))""}]}","constrained_program_synthesis","ready","True","1","90","rw-a2-011","apps-live-011; apps-live-012","Privateized A2/constrained_program_synthesis item derived from APPS, LiveCodeBench.","QB-v1.1 upgraded A2 item inspired by APPS / BigCodeBench style constrained synthesis."
+"A2-012","QB-v1.2","A2","constrained_program_synthesis","single_turn","hard","capability","请实现 Python 函数 `fold_event_windows`。
+实现函数 fold_event_windows(events, gap)。events 为升序整数时间点。将相邻差值 <= gap 的时间点折叠成一个窗口，返回 [(start,end,count)]。只输出完整函数代码。
+要求：
+1. 只输出完整函数代码；
+2. 不要给解释；
+3. 代码需要处理边界情况。","","","exec","{""function_name"": ""fold_event_windows"", ""response_max_tokens"": 2048, ""tests"": [{""expected"": ""[(1, 2, 2), (4, 4, 1), (10, 11, 2)]"", ""harness"": ""print(fold_event_windows([1,2,4,10,11], 1))""}, {""expected"": ""[(3, 7, 4)]"", ""harness"": ""print(fold_event_windows([3,5,6,7], 2))""}]}","constrained_program_synthesis","ready","True","1","90","rw-a2-012","apps-live-012; bigcode-eval-001","Privateized A2/constrained_program_synthesis item derived from BigCodeBench, LiveCodeBench.","QB-v1.1 upgraded A2 item inspired by APPS / BigCodeBench style constrained synthesis."
+"A2-013","QB-v1.2","A2","constrained_program_synthesis","single_turn","hard","capability","请实现 Python 函数 `repair_bucket_constraints`。
+实现函数 repair_bucket_constraints(values, limit)。从左到右把 values 放入多个桶中，每个桶和不能超过 limit；若当前值放不进现有最后一个桶就新开桶。返回桶列表和最大桶和。只输出完整函数代码。
+要求：
+1. 只输出完整函数代码；
+2. 不要给解释；
+3. 代码需要处理边界情况。","","","exec","{""function_name"": ""repair_bucket_constraints"", ""response_max_tokens"": 2048, ""tests"": [{""expected"": ""([[4, 3], [5, 2], [2]], 7)"", ""harness"": ""print(repair_bucket_constraints([4,3,5,2,2], 7))""}, {""expected"": ""([[1, 1, 1]], 3)"", ""harness"": ""print(repair_bucket_constraints([1,1,1], 5))""}]}","constrained_program_synthesis","ready","True","1","90","rw-a2-013","bigcode-eval-001; bigcode-eval-002","Privateized A2/constrained_program_synthesis item derived from BigCodeBench.","QB-v1.1 upgraded A2 item inspired by APPS / BigCodeBench style constrained synthesis."
+"A2-014","QB-v1.2","A2","constrained_program_synthesis","single_turn","hard","capability","请实现 Python 函数 `trace_award_lottery`。
+实现函数 trace_award_lottery(entries)。每项为 (name, weight, active)。忽略 inactive，按 weight 从高到低选前两名；若并列则名字字典序小者优先。返回 winners 和 total_weight。只输出完整函数代码。
+要求：
+1. 只输出完整函数代码；
+2. 不要给解释；
+3. 代码需要处理边界情况。","","","exec","{""function_name"": ""trace_award_lottery"", ""response_max_tokens"": 2048, ""tests"": [{""expected"": ""(['Lan', 'Moe'], 14)"", ""harness"": ""entries=[('Lan',5,True),('Moe',5,True),('Nia',7,False),('Oli',4,True)]\nprint(trace_award_lottery(entries))""}, {""expected"": ""(['B'], 9)"", ""harness"": ""entries=[('A',2,False),('B',9,True)]\nprint(trace_award_lottery(entries))""}]}","constrained_program_synthesis","ready","True","1","90","rw-a2-014","bigcode-eval-002; bigcode-eval-003","Privateized A2/constrained_program_synthesis item derived from BigCodeBench, EvalPlus.","QB-v1.1 upgraded A2 item inspired by APPS / BigCodeBench style constrained synthesis."
+"A2-015","QB-v1.2","A2","constrained_program_synthesis","single_turn","hard","capability","请实现 Python 函数 `merge_nested_intervals`。
+实现函数 merge_nested_intervals(groups)。groups 为字典，value 是该组的若干闭区间。每组先内部合并重叠区间，再返回按键排序后的 {group: merged}。只输出完整函数代码。
+要求：
+1. 只输出完整函数代码；
+2. 不要给解释；
+3. 代码需要处理边界情况。","","","exec","{""function_name"": ""merge_nested_intervals"", ""response_max_tokens"": 2048, ""tests"": [{""expected"": ""{'a': [(7, 8), (10, 11)], 'x': [(1, 5)]}"", ""harness"": ""groups={'x':[(1,3),(2,5)],'a':[(7,8),(10,11)]}\nprint(merge_nested_intervals(groups))""}, {""expected"": ""{'z': [(4, 6)]}"", ""harness"": ""groups={'z':[(4,4),(4,6)]}\nprint(merge_nested_intervals(groups))""}]}","constrained_program_synthesis","ready","True","1","90","rw-a2-015","bigcode-eval-003; bigcode-eval-004","Privateized A2/constrained_program_synthesis item derived from EvalPlus, HumanEval+.","QB-v1.1 upgraded A2 item inspired by APPS / BigCodeBench style constrained synthesis."
+"A2-016","QB-v1.2","A2","long_code_comprehension","single_turn","hard","capability","阅读下面这段较长的 Python 程序，并只输出它的最终标准输出，不要解释。
+```python
+from collections import deque
+
+SEED_VALUES = [11, 8, 15, 10, 17, 6]
+BIAS = 2
+WINDOW = 3
+NAMES = ['amber', 'cedar', 'delta', 'ember', 'fable', 'glint']
+
+
+def normalize(values):
+    normalized = []
+    for index, value in enumerate(values):
+        scale = 2 if index % 2 == 0 else 1
+        normalized.append(value * scale - BIAS)
+    return normalized
+
+
+def build_windows(values):
+    history = deque(maxlen=WINDOW)
+    windows = []
+    for index, value in enumerate(values):
+        history.append(value)
+        if len(history) == WINDOW:
+            windows.append(sum(history) + index - WINDOW + 1)
+    return windows
+
+
+def annotate(scores):
+    labeled = []
+    for index, score in enumerate(scores):
+        label = NAMES[index]
+        if score % 3 == 0:
+            label = label.upper()
+        labeled.append((label, score))
+    return labeled
+
+
+def checksum(pairs):
+    total = 0
+    for index, (_, score) in enumerate(pairs, start=1):
+        total += index * score
+    return total
+
+
+def render_pairs(pairs):
+    parts = []
+    for label, score in pairs:
+        parts.append(f""{label}:{score}"")
+    return ""|"".join(parts)
+
+
+def select_winners(pairs):
+    best = max(score for _, score in pairs)
+    winners = []
+    for label, score in pairs:
+        if score == best:
+            winners.append(label)
+    return winners
+
+
+def enrich(values):
+    normalized = normalize(values)
+    windows = build_windows(normalized)
+    pairs = annotate(windows)
+    return {
+        ""normalized"": normalized,
+        ""windows"": windows,
+        ""pairs"": pairs,
+        ""checksum"": checksum(pairs),
+        ""winners"": select_winners(pairs),
+        ""pairs_rendered"": render_pairs(pairs),
+    }
+
+
+payload = enrich(SEED_VALUES)
+print(payload[""checksum""])
+print("","".join(payload[""winners""]))
+print(payload[""pairs_rendered""])
+
+```","","538
+delta
+AMBER:54|cedar:43|delta:70|ember:47","exact_match","{""match_mode"": ""stdout"", ""response_max_tokens"": 512}","long_code_comprehension","ready","True","1","90","rw-a2-016","bigcode-eval-004; bigcode-eval-005","Privateized A2/long_code_comprehension item derived from HumanEval+, SWE-bench Lite.","QB-v1.1 long code comprehension item inspired by BigCodeBench / SWE-bench Lite code reading style."
+"A2-017","QB-v1.2","A2","long_code_comprehension","single_turn","hard","capability","阅读下面这段较长的 Python 程序，并只输出它的最终标准输出，不要解释。
+```python
+from collections import deque
+
+SEED_VALUES = [12, 9, 16, 11, 18, 7]
+BIAS = 3
+WINDOW = 4
+NAMES = ['amber', 'cedar', 'delta', 'ember', 'fable', 'glint']
+
+
+def normalize(values):
+    normalized = []
+    for index, value in enumerate(values):
+        scale = 2 if index % 2 == 0 else 1
+        normalized.append(value * scale - BIAS)
+    return normalized
+
+
+def build_windows(values):
+    history = deque(maxlen=WINDOW)
+    windows = []
+    for index, value in enumerate(values):
+        history.append(value)
+        if len(history) == WINDOW:
+            windows.append(sum(history) + index - WINDOW + 1)
+    return windows
+
+
+def annotate(scores):
+    labeled = []
+    for index, score in enumerate(scores):
+        label = NAMES[index]
+        if score % 3 == 0:
+            label = label.upper()
+        labeled.append((label, score))
+    return labeled
+
+
+def checksum(pairs):
+    total = 0
+    for index, (_, score) in enumerate(pairs, start=1):
+        total += index * score
+    return total
+
+
+def render_pairs(pairs):
+    parts = []
+    for label, score in pairs:
+        parts.append(f""{label}:{score}"")
+    return ""|"".join(parts)
+
+
+def select_winners(pairs):
+    best = max(score for _, score in pairs)
+    winners = []
+    for label, score in pairs:
+        if score == best:
+            winners.append(label)
+    return winners
+
+
+def enrich(values):
+    normalized = normalize(values)
+    windows = build_windows(normalized)
+    pairs = annotate(windows)
+    return {
+        ""normalized"": normalized,
+        ""windows"": windows,
+        ""pairs"": pairs,
+        ""checksum"": checksum(pairs),
+        ""winners"": select_winners(pairs),
+        ""pairs_rendered"": render_pairs(pairs),
+    }
+
+
+payload = enrich(SEED_VALUES)
+print(payload[""checksum""])
+print("","".join(payload[""winners""]))
+print(payload[""pairs_rendered""])
+
+```","","446
+cedar
+amber:64|cedar:77|delta:76","exact_match","{""match_mode"": ""stdout"", ""response_max_tokens"": 512}","long_code_comprehension","ready","True","1","90","rw-a2-017","bigcode-eval-005; bigcode-eval-006","Privateized A2/long_code_comprehension item derived from SWE-bench Lite.","QB-v1.1 long code comprehension item inspired by BigCodeBench / SWE-bench Lite code reading style."
+"A2-018","QB-v1.2","A2","long_code_comprehension","single_turn","hard","capability","阅读下面这段较长的 Python 程序，并只输出它的最终标准输出，不要解释。
+```python
+from collections import deque
+
+SEED_VALUES = [13, 10, 17, 12, 19, 8]
+BIAS = 4
+WINDOW = 3
+NAMES = ['amber', 'cedar', 'delta', 'ember', 'fable', 'glint']
+
+
+def normalize(values):
+    normalized = []
+    for index, value in enumerate(values):
+        scale = 2 if index % 2 == 0 else 1
+        normalized.append(value * scale - BIAS)
+    return normalized
+
+
+def build_windows(values):
+    history = deque(maxlen=WINDOW)
+    windows = []
+    for index, value in enumerate(values):
+        history.append(value)
+        if len(history) == WINDOW:
+            windows.append(sum(history) + index - WINDOW + 1)
+    return windows
+
+
+def annotate(scores):
+    labeled = []
+    for index, score in enumerate(scores):
+        label = NAMES[index]
+        if score % 3 == 0:
+            label = label.upper()
+        labeled.append((label, score))
+    return labeled
+
+
+def checksum(pairs):
+    total = 0
+    for index, (_, score) in enumerate(pairs, start=1):
+        total += index * score
+    return total
+
+
+def render_pairs(pairs):
+    parts = []
+    for label, score in pairs:
+        parts.append(f""{label}:{score}"")
+    return ""|"".join(parts)
+
+
+def select_winners(pairs):
+    best = max(score for _, score in pairs)
+    winners = []
+    for label, score in pairs:
+        if score == best:
+            winners.append(label)
+    return winners
+
+
+def enrich(values):
+    normalized = normalize(values)
+    windows = build_windows(normalized)
+    pairs = annotate(windows)
+    return {
+        ""normalized"": normalized,
+        ""windows"": windows,
+        ""pairs"": pairs,
+        ""checksum"": checksum(pairs),
+        ""winners"": select_winners(pairs),
+        ""pairs_rendered"": render_pairs(pairs),
+    }
+
+
+payload = enrich(SEED_VALUES)
+print(payload[""checksum""])
+print("","".join(payload[""winners""]))
+print(payload[""pairs_rendered""])
+
+```","","566
+delta
+amber:58|CEDAR:45|delta:74|ember:49","exact_match","{""match_mode"": ""stdout"", ""response_max_tokens"": 512}","long_code_comprehension","ready","True","1","90","rw-a2-018","bigcode-eval-006; bigcode-eval-007","Privateized A2/long_code_comprehension item derived from BigCodeBench, SWE-bench Lite.","QB-v1.1 long code comprehension item inspired by BigCodeBench / SWE-bench Lite code reading style."
+"A2-019","QB-v1.2","A2","long_code_comprehension","single_turn","hard","capability","阅读下面这段较长的 Python 程序，并只输出它的最终标准输出，不要解释。
+```python
+from collections import deque
+
+SEED_VALUES = [14, 11, 18, 13, 20, 9]
+BIAS = 5
+WINDOW = 4
+NAMES = ['amber', 'cedar', 'delta', 'ember', 'fable', 'glint']
+
+
+def normalize(values):
+    normalized = []
+    for index, value in enumerate(values):
+        scale = 2 if index % 2 == 0 else 1
+        normalized.append(value * scale - BIAS)
+    return normalized
+
+
+def build_windows(values):
+    history = deque(maxlen=WINDOW)
+    windows = []
+    for index, value in enumerate(values):
+        history.append(value)
+        if len(history) == WINDOW:
+            windows.append(sum(history) + index - WINDOW + 1)
+    return windows
+
+
+def annotate(scores):
+    labeled = []
+    for index, score in enumerate(scores):
+        label = NAMES[index]
+        if score % 3 == 0:
+            label = label.upper()
+        labeled.append((label, score))
+    return labeled
+
+
+def checksum(pairs):
+    total = 0
+    for index, (_, score) in enumerate(pairs, start=1):
+        total += index * score
+    return total
+
+
+def render_pairs(pairs):
+    parts = []
+    for label, score in pairs:
+        parts.append(f""{label}:{score}"")
+    return ""|"".join(parts)
+
+
+def select_winners(pairs):
+    best = max(score for _, score in pairs)
+    winners = []
+    for label, score in pairs:
+        if score == best:
+            winners.append(label)
+    return winners
+
+
+def enrich(values):
+    normalized = normalize(values)
+    windows = build_windows(normalized)
+    pairs = annotate(windows)
+    return {
+        ""normalized"": normalized,
+        ""windows"": windows,
+        ""pairs"": pairs,
+        ""checksum"": checksum(pairs),
+        ""winners"": select_winners(pairs),
+        ""pairs_rendered"": render_pairs(pairs),
+    }
+
+
+payload = enrich(SEED_VALUES)
+print(payload[""checksum""])
+print("","".join(payload[""winners""]))
+print(payload[""pairs_rendered""])
+
+```","","470
+CEDAR
+amber:68|CEDAR:81|delta:80","exact_match","{""match_mode"": ""stdout"", ""response_max_tokens"": 512}","long_code_comprehension","ready","True","1","90","rw-a2-019","bigcode-eval-007; bigcode-eval-008","Privateized A2/long_code_comprehension item derived from BigCodeBench, EvalPlus.","QB-v1.1 long code comprehension item inspired by BigCodeBench / SWE-bench Lite code reading style."
+"A2-020","QB-v1.2","A2","long_code_comprehension","single_turn","hard","capability","阅读下面这段较长的 Python 程序，并只输出它的最终标准输出，不要解释。
+```python
+from collections import deque
+
+SEED_VALUES = [15, 12, 19, 14, 21, 10]
+BIAS = 2
+WINDOW = 3
+NAMES = ['amber', 'cedar', 'delta', 'ember', 'fable', 'glint']
+
+
+def normalize(values):
+    normalized = []
+    for index, value in enumerate(values):
+        scale = 2 if index % 2 == 0 else 1
+        normalized.append(value * scale - BIAS)
+    return normalized
+
+
+def build_windows(values):
+    history = deque(maxlen=WINDOW)
+    windows = []
+    for index, value in enumerate(values):
+        history.append(value)
+        if len(history) == WINDOW:
+            windows.append(sum(history) + index - WINDOW + 1)
+    return windows
+
+
+def annotate(scores):
+    labeled = []
+    for index, score in enumerate(scores):
+        label = NAMES[index]
+        if score % 3 == 0:
+            label = label.upper()
+        labeled.append((label, score))
+    return labeled
+
+
+def checksum(pairs):
+    total = 0
+    for index, (_, score) in enumerate(pairs, start=1):
+        total += index * score
+    return total
+
+
+def render_pairs(pairs):
+    parts = []
+    for label, score in pairs:
+        parts.append(f""{label}:{score}"")
+    return ""|"".join(parts)
+
+
+def select_winners(pairs):
+    best = max(score for _, score in pairs)
+    winners = []
+    for label, score in pairs:
+        if score == best:
+            winners.append(label)
+    return winners
+
+
+def enrich(values):
+    normalized = normalize(values)
+    windows = build_windows(normalized)
+    pairs = annotate(windows)
+    return {
+        ""normalized"": normalized,
+        ""windows"": windows,
+        ""pairs"": pairs,
+        ""checksum"": checksum(pairs),
+        ""winners"": select_winners(pairs),
+        ""pairs_rendered"": render_pairs(pairs),
+    }
+
+
+payload = enrich(SEED_VALUES)
+print(payload[""checksum""])
+print("","".join(payload[""winners""]))
+print(payload[""pairs_rendered""])
+
+```","","714
+DELTA
+amber:74|cedar:59|DELTA:90|EMBER:63","exact_match","{""match_mode"": ""stdout"", ""response_max_tokens"": 512}","long_code_comprehension","ready","True","1","90","rw-a2-020","bigcode-eval-008; bigcode-eval-009","Privateized A2/long_code_comprehension item derived from BigCodeBench, EvalPlus.","QB-v1.1 long code comprehension item inspired by BigCodeBench / SWE-bench Lite code reading style."
+"A2-021","QB-v1.2","A2","long_code_comprehension","single_turn","hard","capability","阅读下面这段较长的 Python 程序，并只输出它的最终标准输出，不要解释。
+```python
+from collections import deque
+
+SEED_VALUES = [16, 13, 20, 15, 22, 11]
+BIAS = 3
+WINDOW = 4
+NAMES = ['amber', 'cedar', 'delta', 'ember', 'fable', 'glint']
+
+
+def normalize(values):
+    normalized = []
+    for index, value in enumerate(values):
+        scale = 2 if index % 2 == 0 else 1
+        normalized.append(value * scale - BIAS)
+    return normalized
+
+
+def build_windows(values):
+    history = deque(maxlen=WINDOW)
+    windows = []
+    for index, value in enumerate(values):
+        history.append(value)
+        if len(history) == WINDOW:
+            windows.append(sum(history) + index - WINDOW + 1)
+    return windows
+
+
+def annotate(scores):
+    labeled = []
+    for index, score in enumerate(scores):
+        label = NAMES[index]
+        if score % 3 == 0:
+            label = label.upper()
+        labeled.append((label, score))
+    return labeled
+
+
+def checksum(pairs):
+    total = 0
+    for index, (_, score) in enumerate(pairs, start=1):
+        total += index * score
+    return total
+
+
+def render_pairs(pairs):
+    parts = []
+    for label, score in pairs:
+        parts.append(f""{label}:{score}"")
+    return ""|"".join(parts)
+
+
+def select_winners(pairs):
+    best = max(score for _, score in pairs)
+    winners = []
+    for label, score in pairs:
+        if score == best:
+            winners.append(label)
+    return winners
+
+
+def enrich(values):
+    normalized = normalize(values)
+    windows = build_windows(normalized)
+    pairs = annotate(windows)
+    return {
+        ""normalized"": normalized,
+        ""windows"": windows,
+        ""pairs"": pairs,
+        ""checksum"": checksum(pairs),
+        ""winners"": select_winners(pairs),
+        ""pairs_rendered"": render_pairs(pairs),
+    }
+
+
+payload = enrich(SEED_VALUES)
+print(payload[""checksum""])
+print("","".join(payload[""winners""]))
+print(payload[""pairs_rendered""])
+
+```","","590
+cedar
+amber:88|cedar:101|delta:100","exact_match","{""match_mode"": ""stdout"", ""response_max_tokens"": 512}","long_code_comprehension","ready","True","1","90","rw-a2-021","bigcode-eval-009; bigcode-eval-010","Privateized A2/long_code_comprehension item derived from BigCodeBench, SWE-bench Lite.","QB-v1.1 long code comprehension item inspired by BigCodeBench / SWE-bench Lite code reading style."
+"A2-022","QB-v1.2","A2","long_code_comprehension","single_turn","hard","capability","阅读下面这段较长的 Python 程序，并只输出它的最终标准输出，不要解释。
+```python
+from collections import deque
+
+SEED_VALUES = [17, 14, 21, 16, 23, 12]
+BIAS = 4
+WINDOW = 3
+NAMES = ['amber', 'cedar', 'delta', 'ember', 'fable', 'glint']
+
+
+def normalize(values):
+    normalized = []
+    for index, value in enumerate(values):
+        scale = 2 if index % 2 == 0 else 1
+        normalized.append(value * scale - BIAS)
+    return normalized
+
+
+def build_windows(values):
+    history = deque(maxlen=WINDOW)
+    windows = []
+    for index, value in enumerate(values):
+        history.append(value)
+        if len(history) == WINDOW:
+            windows.append(sum(history) + index - WINDOW + 1)
+    return windows
+
+
+def annotate(scores):
+    labeled = []
+    for index, score in enumerate(scores):
+        label = NAMES[index]
+        if score % 3 == 0:
+            label = label.upper()
+        labeled.append((label, score))
+    return labeled
+
+
+def checksum(pairs):
+    total = 0
+    for index, (_, score) in enumerate(pairs, start=1):
+        total += index * score
+    return total
+
+
+def render_pairs(pairs):
+    parts = []
+    for label, score in pairs:
+        parts.append(f""{label}:{score}"")
+    return ""|"".join(parts)
+
+
+def select_winners(pairs):
+    best = max(score for _, score in pairs)
+    winners = []
+    for label, score in pairs:
+        if score == best:
+            winners.append(label)
+    return winners
+
+
+def enrich(values):
+    normalized = normalize(values)
+    windows = build_windows(normalized)
+    pairs = annotate(windows)
+    return {
+        ""normalized"": normalized,
+        ""windows"": windows,
+        ""pairs"": pairs,
+        ""checksum"": checksum(pairs),
+        ""winners"": select_winners(pairs),
+        ""pairs_rendered"": render_pairs(pairs),
+    }
+
+
+payload = enrich(SEED_VALUES)
+print(payload[""checksum""])
+print("","".join(payload[""winners""]))
+print(payload[""pairs_rendered""])
+
+```","","742
+delta
+AMBER:78|cedar:61|delta:94|ember:65","exact_match","{""match_mode"": ""stdout"", ""response_max_tokens"": 512}","long_code_comprehension","ready","True","1","90","rw-a2-022","bigcode-eval-010; bigcode-eval-011","Privateized A2/long_code_comprehension item derived from HumanEval+, SWE-bench Lite.","QB-v1.1 long code comprehension item inspired by BigCodeBench / SWE-bench Lite code reading style."
+"A2-023","QB-v1.2","A2","long_code_comprehension","single_turn","hard","capability","阅读下面这段较长的 Python 程序，并只输出它的最终标准输出，不要解释。
+```python
+from collections import deque
+
+SEED_VALUES = [18, 15, 22, 17, 24, 13]
+BIAS = 5
+WINDOW = 4
+NAMES = ['amber', 'cedar', 'delta', 'ember', 'fable', 'glint']
+
+
+def normalize(values):
+    normalized = []
+    for index, value in enumerate(values):
+        scale = 2 if index % 2 == 0 else 1
+        normalized.append(value * scale - BIAS)
+    return normalized
+
+
+def build_windows(values):
+    history = deque(maxlen=WINDOW)
+    windows = []
+    for index, value in enumerate(values):
+        history.append(value)
+        if len(history) == WINDOW:
+            windows.append(sum(history) + index - WINDOW + 1)
+    return windows
+
+
+def annotate(scores):
+    labeled = []
+    for index, score in enumerate(scores):
+        label = NAMES[index]
+        if score % 3 == 0:
+            label = label.upper()
+        labeled.append((label, score))
+    return labeled
+
+
+def checksum(pairs):
+    total = 0
+    for index, (_, score) in enumerate(pairs, start=1):
+        total += index * score
+    return total
+
+
+def render_pairs(pairs):
+    parts = []
+    for label, score in pairs:
+        parts.append(f""{label}:{score}"")
+    return ""|"".join(parts)
+
+
+def select_winners(pairs):
+    best = max(score for _, score in pairs)
+    winners = []
+    for label, score in pairs:
+        if score == best:
+            winners.append(label)
+    return winners
+
+
+def enrich(values):
+    normalized = normalize(values)
+    windows = build_windows(normalized)
+    pairs = annotate(windows)
+    return {
+        ""normalized"": normalized,
+        ""windows"": windows,
+        ""pairs"": pairs,
+        ""checksum"": checksum(pairs),
+        ""winners"": select_winners(pairs),
+        ""pairs_rendered"": render_pairs(pairs),
+    }
+
+
+payload = enrich(SEED_VALUES)
+print(payload[""checksum""])
+print("","".join(payload[""winners""]))
+print(payload[""pairs_rendered""])
+
+```","","614
+CEDAR
+amber:92|CEDAR:105|delta:104","exact_match","{""match_mode"": ""stdout"", ""response_max_tokens"": 512}","long_code_comprehension","ready","True","1","90","rw-a2-023","bigcode-eval-011; bigcode-eval-012","Privateized A2/long_code_comprehension item derived from BigCodeBench, HumanEval+.","QB-v1.1 long code comprehension item inspired by BigCodeBench / SWE-bench Lite code reading style."
+"A2-024","QB-v1.2","A2","long_code_comprehension","single_turn","hard","capability","阅读下面这段较长的 Python 程序，并只输出它的最终标准输出，不要解释。
+```python
+from collections import deque
+
+SEED_VALUES = [19, 16, 23, 18, 25, 14]
+BIAS = 2
+WINDOW = 3
+NAMES = ['amber', 'cedar', 'delta', 'ember', 'fable', 'glint']
+
+
+def normalize(values):
+    normalized = []
+    for index, value in enumerate(values):
+        scale = 2 if index % 2 == 0 else 1
+        normalized.append(value * scale - BIAS)
+    return normalized
+
+
+def build_windows(values):
+    history = deque(maxlen=WINDOW)
+    windows = []
+    for index, value in enumerate(values):
+        history.append(value)
+        if len(history) == WINDOW:
+            windows.append(sum(history) + index - WINDOW + 1)
+    return windows
+
+
+def annotate(scores):
+    labeled = []
+    for index, score in enumerate(scores):
+        label = NAMES[index]
+        if score % 3 == 0:
+            label = label.upper()
+        labeled.append((label, score))
+    return labeled
+
+
+def checksum(pairs):
+    total = 0
+    for index, (_, score) in enumerate(pairs, start=1):
+        total += index * score
+    return total
+
+
+def render_pairs(pairs):
+    parts = []
+    for label, score in pairs:
+        parts.append(f""{label}:{score}"")
+    return ""|"".join(parts)
+
+
+def select_winners(pairs):
+    best = max(score for _, score in pairs)
+    winners = []
+    for label, score in pairs:
+        if score == best:
+            winners.append(label)
+    return winners
+
+
+def enrich(values):
+    normalized = normalize(values)
+    windows = build_windows(normalized)
+    pairs = annotate(windows)
+    return {
+        ""normalized"": normalized,
+        ""windows"": windows,
+        ""pairs"": pairs,
+        ""checksum"": checksum(pairs),
+        ""winners"": select_winners(pairs),
+        ""pairs_rendered"": render_pairs(pairs),
+    }
+
+
+payload = enrich(SEED_VALUES)
+print(payload[""checksum""])
+print("","".join(payload[""winners""]))
+print(payload[""pairs_rendered""])
+
+```","","890
+delta
+amber:94|CEDAR:75|delta:110|ember:79","exact_match","{""match_mode"": ""stdout"", ""response_max_tokens"": 512}","long_code_comprehension","ready","True","1","90","rw-a2-024","bigcode-eval-012; lcb-testgen-2727-0","Privateized A2/long_code_comprehension item derived from BigCodeBench, LiveCodeBench.","QB-v1.1 long code comprehension item inspired by BigCodeBench / SWE-bench Lite code reading style."
+"A2-025","QB-v1.2","A2","long_code_comprehension","single_turn","hard","capability","阅读下面这段较长的 Python 程序，并只输出它的最终标准输出，不要解释。
+```python
+from collections import deque
+
+SEED_VALUES = [20, 17, 24, 19, 26, 15]
+BIAS = 3
+WINDOW = 4
+NAMES = ['amber', 'cedar', 'delta', 'ember', 'fable', 'glint']
+
+
+def normalize(values):
+    normalized = []
+    for index, value in enumerate(values):
+        scale = 2 if index % 2 == 0 else 1
+        normalized.append(value * scale - BIAS)
+    return normalized
+
+
+def build_windows(values):
+    history = deque(maxlen=WINDOW)
+    windows = []
+    for index, value in enumerate(values):
+        history.append(value)
+        if len(history) == WINDOW:
+            windows.append(sum(history) + index - WINDOW + 1)
+    return windows
+
+
+def annotate(scores):
+    labeled = []
+    for index, score in enumerate(scores):
+        label = NAMES[index]
+        if score % 3 == 0:
+            label = label.upper()
+        labeled.append((label, score))
+    return labeled
+
+
+def checksum(pairs):
+    total = 0
+    for index, (_, score) in enumerate(pairs, start=1):
+        total += index * score
+    return total
+
+
+def render_pairs(pairs):
+    parts = []
+    for label, score in pairs:
+        parts.append(f""{label}:{score}"")
+    return ""|"".join(parts)
+
+
+def select_winners(pairs):
+    best = max(score for _, score in pairs)
+    winners = []
+    for label, score in pairs:
+        if score == best:
+            winners.append(label)
+    return winners
+
+
+def enrich(values):
+    normalized = normalize(values)
+    windows = build_windows(normalized)
+    pairs = annotate(windows)
+    return {
+        ""normalized"": normalized,
+        ""windows"": windows,
+        ""pairs"": pairs,
+        ""checksum"": checksum(pairs),
+        ""winners"": select_winners(pairs),
+        ""pairs_rendered"": render_pairs(pairs),
+    }
+
+
+payload = enrich(SEED_VALUES)
+print(payload[""checksum""])
+print("","".join(payload[""winners""]))
+print(payload[""pairs_rendered""])
+
+```","","734
+cedar
+amber:112|cedar:125|delta:124","exact_match","{""match_mode"": ""stdout"", ""response_max_tokens"": 512}","long_code_comprehension","ready","True","1","90","rw-a2-025","lcb-testgen-2727-0; lcb-testgen-2727-1","Privateized A2/long_code_comprehension item derived from LiveCodeBench.","QB-v1.1 long code comprehension item inspired by BigCodeBench / SWE-bench Lite code reading style."
+"A2-026","QB-v1.2","A2","stateful_data_processing","single_turn","hard","capability","请实现 Python 函数 `parse_shift_log`。
+实现函数 parse_shift_log(lines)。每行形如 `name|in`、`name|out` 或 `name|task:count`。只有在 in 之后的 task 才计数；out 后忽略后续 task 直到再次 in。返回按姓名排序的任务总数字典。
+只输出完整函数代码，不要解释。","","","exec","{""function_name"": ""parse_shift_log"", ""response_max_tokens"": 2048, ""tests"": [{""expected"": ""{'A': 3, 'B': 2}"", ""harness"": ""lines=['A|in','A|task:3','A|out','A|task:9','B|in','B|task:2']\nprint(parse_shift_log(lines))""}, {""expected"": ""{'M': 5}"", ""harness"": ""lines=['M|task:1','M|in','M|task:4','M|task:1']\nprint(parse_shift_log(lines))""}]}","stateful_data_processing","ready","True","1","90","rw-a2-026","lcb-testgen-2727-1; lcb-testgen-2728-0","Privateized A2/stateful_data_processing item derived from LiveCodeBench.","QB-v1.1 A2 stateful processing item inspired by LiveCodeBench / APPS style data-flow tasks."
+"A2-027","QB-v1.2","A2","stateful_data_processing","single_turn","hard","capability","请实现 Python 函数 `fill_character_matrix`。
+实现函数 fill_character_matrix(size, commands)。size 为 n。commands 包含 ROW:r:token、COL:c:token、DIAG:token。后来的命令覆盖先前字符。返回最终矩阵字符串列表。
+只输出完整函数代码，不要解释。","","","exec","{""function_name"": ""fill_character_matrix"", ""response_max_tokens"": 2048, ""tests"": [{""expected"": ""['koo', 'xkx', 'o.k']"", ""harness"": ""print(fill_character_matrix(3,['ROW:1:x','COL:0:o','DIAG:k']))""}, {""expected"": ""['.z', '.z']"", ""harness"": ""print(fill_character_matrix(2,['COL:1:z']))""}]}","stateful_data_processing","ready","True","1","90","rw-a2-027","lcb-testgen-2728-0; lcb-testgen-2728-1","Privateized A2/stateful_data_processing item derived from LiveCodeBench.","QB-v1.1 A2 stateful processing item inspired by LiveCodeBench / APPS style data-flow tasks."
+"A2-028","QB-v1.2","A2","stateful_data_processing","single_turn","hard","capability","请实现 Python 函数 `reconcile_pipeline_log`。
+实现函数 reconcile_pipeline_log(rows)。每行 `job,status,ts`。对每个 job 保留时间戳最大的状态，然后返回按 status 聚合后的 job 数量字典。
+只输出完整函数代码，不要解释。","","","exec","{""function_name"": ""reconcile_pipeline_log"", ""response_max_tokens"": 2048, ""tests"": [{""expected"": ""{'fail': 1, 'ok': 1}"", ""harness"": ""rows=['j1,ok,1','j1,fail,3','j2,ok,2']\nprint(reconcile_pipeline_log(rows))""}, {""expected"": ""{'hold': 1, 'ok': 1}"", ""harness"": ""rows=['a,hold,5','a,ok,6','b,hold,7']\nprint(reconcile_pipeline_log(rows))""}]}","stateful_data_processing","ready","True","1","90","rw-a2-028","lcb-testgen-2728-1; lcb-testgen-2730-0","Privateized A2/stateful_data_processing item derived from LiveCodeBench.","QB-v1.1 A2 stateful processing item inspired by LiveCodeBench / APPS style data-flow tasks."
+"A2-029","QB-v1.2","A2","stateful_data_processing","single_turn","hard","capability","请实现 Python 函数 `simulate_train_sales`。
+实现函数 simulate_train_sales(capacity, ops)。ops 为 `book:name:count` / `refund:name:count`。book 只有余票足够才成功；refund 不会退成负数。返回各人持票数和余票。
+只输出完整函数代码，不要解释。","","","exec","{""function_name"": ""simulate_train_sales"", ""response_max_tokens"": 2048, ""tests"": [{""expected"": ""({'A': 1, 'B': 3}, 1)"", ""harness"": ""print(simulate_train_sales(5,['book:A:2','book:B:3','refund:A:1','book:C:1']))""}, {""expected"": ""({'X': 1}, 1)"", ""harness"": ""print(simulate_train_sales(2,['book:X:3','book:X:1']))""}]}","stateful_data_processing","ready","True","1","90","rw-a2-029","lcb-testgen-2730-0; lcb-testgen-2730-1","Privateized A2/stateful_data_processing item derived from LiveCodeBench.","QB-v1.1 A2 stateful processing item inspired by LiveCodeBench / APPS style data-flow tasks."
+"A2-030","QB-v1.2","A2","stateful_data_processing","single_turn","hard","capability","请实现 Python 函数 `count_text_channels`。
+实现函数 count_text_channels(text)。逐字符扫描英文文本。字母、数字、空格、标点分别计数，并返回出现次数最多的字母（忽略大小写，若并列取字母序最小）。
+只输出完整函数代码，不要解释。","","","exec","{""function_name"": ""count_text_channels"", ""response_max_tokens"": 2048, ""tests"": [{""expected"": ""{'letters': 3, 'digits': 2, 'spaces': 1, 'punct': 2, 'top_letter': 'a'}"", ""harness"": ""print(count_text_channels('Aa-b 11?'))""}, {""expected"": ""{'letters': 3, 'digits': 0, 'spaces': 0, 'punct': 2, 'top_letter': 'y'}"", ""harness"": ""print(count_text_channels('xyY!!'))""}]}","stateful_data_processing","ready","True","1","90","rw-a2-030","lcb-testgen-2730-1; lcb-testgen-2754-0","Privateized A2/stateful_data_processing item derived from LiveCodeBench.","QB-v1.1 A2 stateful processing item inspired by LiveCodeBench / APPS style data-flow tasks."
+"A2-031","QB-v1.2","A2","stateful_data_processing","single_turn","hard","capability","请实现 Python 函数 `compact_alarm_windows`。
+实现函数 compact_alarm_windows(events)。events 为 `(machine, ts)` 升序。对每台 machine 把时间差 <=2 的事件压缩成窗口，返回 {machine: [(start,end,count)]}。
+只输出完整函数代码，不要解释。","","","exec","{""function_name"": ""compact_alarm_windows"", ""response_max_tokens"": 2048, ""tests"": [{""expected"": ""{'m1': [(1, 2, 2), (6, 6, 1)], 'm2': [(3, 4, 2)]}"", ""harness"": ""events=[('m1',1),('m1',2),('m1',6),('m2',3),('m2',4)]\nprint(compact_alarm_windows(events))""}, {""expected"": ""{'x': [(9, 9, 1)]}"", ""harness"": ""events=[('x',9)]\nprint(compact_alarm_windows(events))""}]}","stateful_data_processing","ready","True","1","90","rw-a2-031","lcb-testgen-2754-0; lcb-testgen-2754-1","Privateized A2/stateful_data_processing item derived from LiveCodeBench.","QB-v1.1 A2 stateful processing item inspired by LiveCodeBench / APPS style data-flow tasks."
+"A2-032","QB-v1.2","A2","stateful_data_processing","single_turn","hard","capability","请实现 Python 函数 `normalize_batch_records`。
+实现函数 normalize_batch_records(rows)。rows 每项为 `(batch, tag, value)`。同一 batch 内，tag 后写覆盖前写；最终返回按 batch 排序的 `{batch: 'k1=v1|k2=v2'}` 字典，tag 按字典序连接。
+只输出完整函数代码，不要解释。","","","exec","{""function_name"": ""normalize_batch_records"", ""response_max_tokens"": 2048, ""tests"": [{""expected"": ""{'b1': 'x=5|y=2', 'b2': 'a=3'}"", ""harness"": ""rows=[('b1','x',1),('b1','y',2),('b1','x',5),('b2','a',3)]\nprint(normalize_batch_records(rows))""}, {""expected"": ""{'z': 'k=9'}"", ""harness"": ""rows=[('z','k',9)]\nprint(normalize_batch_records(rows))""}]}","stateful_data_processing","ready","True","1","90","rw-a2-032","lcb-testgen-2754-1; lcb-testgen-2755-0","Privateized A2/stateful_data_processing item derived from LiveCodeBench.","QB-v1.1 A2 stateful processing item inspired by LiveCodeBench / APPS style data-flow tasks."
+"A2-033","QB-v1.2","A2","stateful_data_processing","single_turn","hard","capability","请实现 Python 函数 `trace_lottery_winners`。
+实现函数 trace_lottery_winners(names, scores, bonus_cutoff)。先把 names 和 scores 对齐，得分 >= bonus_cutoff 的人进入 bonus 池。返回 bonus 池按分数降序、姓名升序排序后的名字列表和总分。
+只输出完整函数代码，不要解释。","","","exec","{""function_name"": ""trace_lottery_winners"", ""response_max_tokens"": 2048, ""tests"": [{""expected"": ""(['B', 'A', 'C'], 26)"", ""harness"": ""print(trace_lottery_winners(['A','B','C'], [8,10,8], 8))""}, {""expected"": ""([], 0)"", ""harness"": ""print(trace_lottery_winners(['N'], [3], 5))""}]}","stateful_data_processing","ready","True","1","90","rw-a2-033","lcb-testgen-2755-0; lcb-testgen-2755-1","Privateized A2/stateful_data_processing item derived from LiveCodeBench.","QB-v1.1 A2 stateful processing item inspired by LiveCodeBench / APPS style data-flow tasks."
+"A2-034","QB-v1.2","A2","stateful_data_processing","single_turn","hard","capability","请实现 Python 函数 `diff_sparse_grids`。
+实现函数 diff_sparse_grids(a, b)。a/b 为同尺寸字符串列表。返回所有不同位置的 `(r,c,a_char,b_char)`。按行列升序。
+只输出完整函数代码，不要解释。","","","exec","{""function_name"": ""diff_sparse_grids"", ""response_max_tokens"": 2048, ""tests"": [{""expected"": ""[(0, 1, 'b', 'x'), (1, 1, 'c', 'd')]"", ""harness"": ""print(diff_sparse_grids(['ab','.c'], ['ax','.d']))""}, {""expected"": ""[]"", ""harness"": ""print(diff_sparse_grids(['..'], ['..']))""}]}","stateful_data_processing","ready","True","1","90","rw-a2-034","lcb-testgen-2755-1; lcb-testgen-2756-0","Privateized A2/stateful_data_processing item derived from LiveCodeBench.","QB-v1.1 A2 stateful processing item inspired by LiveCodeBench / APPS style data-flow tasks."
+"A2-035","QB-v1.2","A2","stateful_data_processing","single_turn","hard","capability","请实现 Python 函数 `expand_queue_snapshots`。
+实现函数 expand_queue_snapshots(ops)。支持 ENQ:x、DEQ、PEEK、RESET。对每个 PEEK 记录当前队首；最终返回所有快照列表和最终队列。
+只输出完整函数代码，不要解释。","","","exec","{""function_name"": ""expand_queue_snapshots"", ""response_max_tokens"": 2048, ""tests"": [{""expected"": ""(['a', 'b'], ['b'])"", ""harness"": ""print(expand_queue_snapshots(['ENQ:a','ENQ:b','PEEK','DEQ','PEEK']))""}, {""expected"": ""([None, None], [])"", ""harness"": ""print(expand_queue_snapshots(['PEEK','ENQ:x','RESET','PEEK']))""}]}","stateful_data_processing","ready","True","1","90","rw-a2-035","lcb-testgen-2756-0; lcb-testgen-2756-1","Privateized A2/stateful_data_processing item derived from LiveCodeBench.","QB-v1.1 A2 stateful processing item inspired by LiveCodeBench / APPS style data-flow tasks."
+"A2-036","QB-v1.2","A2","stateful_data_processing","single_turn","hard","capability","请实现 Python 函数 `summarize_pipe_repair`。
+实现函数 summarize_pipe_repair(segments)。每项 `(name, blocked, repaired)`。若 repaired >= blocked 则该段状态 cleared，否则 pending。返回 cleared 名单和未清除剩余总量。
+只输出完整函数代码，不要解释。","","","exec","{""function_name"": ""summarize_pipe_repair"", ""response_max_tokens"": 2048, ""tests"": [{""expected"": ""(['p1'], 3)"", ""harness"": ""print(summarize_pipe_repair([('p1',5,5),('p2',4,1)]))""}, {""expected"": ""(['a'], 0)"", ""harness"": ""print(summarize_pipe_repair([('a',2,3)]))""}]}","stateful_data_processing","ready","True","1","90","rw-a2-036","lcb-testgen-2756-1; lcb-testgen-2757-0","Privateized A2/stateful_data_processing item derived from LiveCodeBench.","QB-v1.1 A2 stateful processing item inspired by LiveCodeBench / APPS style data-flow tasks."
+"A2-037","QB-v1.2","A2","stateful_data_processing","single_turn","hard","capability","请实现 Python 函数 `restore_compressed_notes`。
+实现函数 restore_compressed_notes(text)。格式如 `a3|b1|c2`，表示字符重复。还原后去掉所有重复段中次数为 1 的分隔符影响，只返回纯字符串。
+只输出完整函数代码，不要解释。","","","exec","{""function_name"": ""restore_compressed_notes"", ""response_max_tokens"": 2048, ""tests"": [{""expected"": ""aaabcc"", ""harness"": ""print(restore_compressed_notes('a3|b1|c2'))""}, {""expected"": ""xyyyy"", ""harness"": ""print(restore_compressed_notes('x1|y4'))""}]}","stateful_data_processing","ready","True","1","90","rw-a2-037","lcb-testgen-2757-0; lcb-testgen-2757-1","Privateized A2/stateful_data_processing item derived from LiveCodeBench.","QB-v1.1 A2 stateful processing item inspired by LiveCodeBench / APPS style data-flow tasks."
+"A2-038","QB-v1.2","A2","stateful_data_processing","single_turn","hard","capability","请实现 Python 函数 `rank_word_packs`。
+实现函数 rank_word_packs(words)。按 `(不同字母数, 长度, 单词本身)` 排序；返回排序结果和首个单词的元组签名。
+只输出完整函数代码，不要解释。","","","exec","{""function_name"": ""rank_word_packs"", ""response_max_tokens"": 2048, ""tests"": [{""expected"": ""(['bee', 'noon', 'alpha'], (2, 3, 'bee'))"", ""harness"": ""print(rank_word_packs(['alpha','noon','bee']))""}, {""expected"": ""(['zz', 'ab'], (1, 2, 'zz'))"", ""harness"": ""print(rank_word_packs(['zz','ab']))""}]}","stateful_data_processing","ready","True","1","90","rw-a2-038","lcb-testgen-2757-1; lcb-testgen-2777-0","Privateized A2/stateful_data_processing item derived from LiveCodeBench.","QB-v1.1 A2 stateful processing item inspired by LiveCodeBench / APPS style data-flow tasks."
+"A2-039","QB-v1.2","A2","stateful_data_processing","single_turn","hard","capability","请实现 Python 函数 `trace_machine_registers`。
+实现函数 trace_machine_registers(cmds)。寄存器初值 a=0,b=0。支持 SET:x:n、ADD:x:n、SWAP、ZERO:x。返回最终寄存器和每次 SWAP 后的快照列表。
+只输出完整函数代码，不要解释。","","","exec","{""function_name"": ""trace_machine_registers"", ""response_max_tokens"": 2048, ""tests"": [{""expected"": ""({'a': 0, 'b': 3}, [(2, 3)])"", ""harness"": ""print(trace_machine_registers(['SET:a:3','ADD:b:2','SWAP','ZERO:a']))""}, {""expected"": ""({'a': 0, 'b': 5}, [])"", ""harness"": ""print(trace_machine_registers(['SET:b:5']))""}]}","stateful_data_processing","ready","True","1","90","rw-a2-039","lcb-testgen-2777-0; lcb-testgen-2777-1","Privateized A2/stateful_data_processing item derived from LiveCodeBench.","QB-v1.1 A2 stateful processing item inspired by LiveCodeBench / APPS style data-flow tasks."
+"A2-040","QB-v1.2","A2","stateful_data_processing","single_turn","hard","capability","请实现 Python 函数 `build_ascii_layers`。
+实现函数 build_ascii_layers(tokens, width)。依次把 token 写入宽为 width 的层，每层满了就下一层。每层用 `.` 补齐。返回层列表和每层非点字符数。
+只输出完整函数代码，不要解释。","","","exec","{""function_name"": ""build_ascii_layers"", ""response_max_tokens"": 2048, ""tests"": [{""expected"": ""(['abc.', 'de..'], [3, 2])"", ""harness"": ""print(build_ascii_layers(['ab','c','de'], 4))""}, {""expected"": ""(['x.'], [1])"", ""harness"": ""print(build_ascii_layers(['x'], 2))""}]}","stateful_data_processing","ready","True","1","90","rw-a2-040","lcb-testgen-2777-1; lcb-testgen-2779-0","Privateized A2/stateful_data_processing item derived from LiveCodeBench.","QB-v1.1 A2 stateful processing item inspired by LiveCodeBench / APPS style data-flow tasks."
+"A2-041","QB-v1.2","A2","bug_fix_and_patch_reasoning","single_turn","hard","capability","下面的 Python 函数有一个逻辑错误，请修复它并只输出修复后的完整函数代码，不要解释。
+错误说明：稳定累计同 key 的增量，初始值应为 0。
+```python
+def stabilize_counts(rows):
+    out = {}
+    for key, delta in rows:
+        out[key] = out.get(key, 1) + delta
+    return out
+```","","","exec","{""bug_fix"": true, ""response_max_tokens"": 1536, ""tests"": [{""expected"": ""{'a': 5, 'b': 1}"", ""harness"": ""print(stabilize_counts([('a',2),('a',3),('b',1)]))""}, {""expected"": ""{}"", ""harness"": ""print(stabilize_counts([]))""}]}","bug_fix_and_patch_reasoning","ready","True","1","90","rw-a2-041","lcb-testgen-2779-0; lcb-testgen-2779-1","Privateized A2/bug_fix_and_patch_reasoning item derived from LiveCodeBench.","QB-v1.1 A2 bug-fix item inspired by EvalPlus / SWE-bench Lite single-function repair."
+"A2-042","QB-v1.2","A2","bug_fix_and_patch_reasoning","single_turn","hard","capability","下面的 Python 函数有一个逻辑错误，请修复它并只输出修复后的完整函数代码，不要解释。
+错误说明：当长度为偶数时应返回靠左中位元素，而不是靠右。
+```python
+def pick_left_middle(values):
+    return values[len(values) // 2]
+```","","","exec","{""bug_fix"": true, ""response_max_tokens"": 1536, ""tests"": [{""expected"": ""8"", ""harness"": ""print(pick_left_middle([9,8,7,6]))""}, {""expected"": ""2"", ""harness"": ""print(pick_left_middle([1,2,3]))""}]}","bug_fix_and_patch_reasoning","ready","True","1","90","rw-a2-042","lcb-testgen-2779-1; lcb-testgen-2784-0","Privateized A2/bug_fix_and_patch_reasoning item derived from LiveCodeBench.","QB-v1.1 A2 bug-fix item inspired by EvalPlus / SWE-bench Lite single-function repair."
+"A2-043","QB-v1.2","A2","bug_fix_and_patch_reasoning","single_turn","hard","capability","下面的 Python 函数有一个逻辑错误，请修复它并只输出修复后的完整函数代码，不要解释。
+错误说明：应返回列表而不是拼成一个长字符串。
+```python
+def merge_pairs(items):
+    merged = []
+    for left, right in items:
+        merged.append(left + '-' + right)
+    return ''.join(merged)
+```","","","exec","{""bug_fix"": true, ""response_max_tokens"": 1536, ""tests"": [{""expected"": ""['a-b', 'c-d']"", ""harness"": ""print(merge_pairs([('a','b'),('c','d')]))""}, {""expected"": ""[]"", ""harness"": ""print(merge_pairs([]))""}]}","bug_fix_and_patch_reasoning","ready","True","1","90","rw-a2-043","lcb-testgen-2784-0; lcb-testgen-2784-1","Privateized A2/bug_fix_and_patch_reasoning item derived from LiveCodeBench.","QB-v1.1 A2 bug-fix item inspired by EvalPlus / SWE-bench Lite single-function repair."
+"A2-044","QB-v1.2","A2","bug_fix_and_patch_reasoning","single_turn","hard","capability","下面的 Python 函数有一个逻辑错误，请修复它并只输出修复后的完整函数代码，不要解释。
+错误说明：负数应保留，正数才压成 0。
+```python
+def clamp_to_zero(values):
+    return [min(v, 0) for v in values]
+```","","","exec","{""bug_fix"": true, ""response_max_tokens"": 1536, ""tests"": [{""expected"": ""[-2, 0, 0]"", ""harness"": ""print(clamp_to_zero([-2,3,0]))""}, {""expected"": ""[0]"", ""harness"": ""print(clamp_to_zero([4]))""}]}","bug_fix_and_patch_reasoning","ready","True","1","90","rw-a2-044","lcb-testgen-2784-1; lcb-testgen-2785-0","Privateized A2/bug_fix_and_patch_reasoning item derived from LiveCodeBench.","QB-v1.1 A2 bug-fix item inspired by EvalPlus / SWE-bench Lite single-function repair."
+"A2-045","QB-v1.2","A2","bug_fix_and_patch_reasoning","single_turn","hard","capability","下面的 Python 函数有一个逻辑错误，请修复它并只输出修复后的完整函数代码，不要解释。
+错误说明：True 应累加而不是累减。
+```python
+def summarize_flags(flags):
+    total = 0
+    for flag in flags:
+        if flag:
+            total -= 1
+    return total
+```","","","exec","{""bug_fix"": true, ""response_max_tokens"": 1536, ""tests"": [{""expected"": ""2"", ""harness"": ""print(summarize_flags([True, False, True]))""}, {""expected"": ""0"", ""harness"": ""print(summarize_flags([]))""}]}","bug_fix_and_patch_reasoning","ready","True","1","90","rw-a2-045","lcb-testgen-2785-0; lcb-testgen-2785-1","Privateized A2/bug_fix_and_patch_reasoning item derived from LiveCodeBench.","QB-v1.1 A2 bug-fix item inspired by EvalPlus / SWE-bench Lite single-function repair."
+"A2-046","QB-v1.2","A2","bug_fix_and_patch_reasoning","single_turn","hard","capability","下面的 Python 函数有一个逻辑错误，请修复它并只输出修复后的完整函数代码，不要解释。
+错误说明：应执行循环右移而不是左移。
+```python
+def rotate_window(values, k):
+    k = k % len(values)
+    return values[k:] + values[:k]
+```","","","exec","{""bug_fix"": true, ""response_max_tokens"": 1536, ""tests"": [{""expected"": ""[4, 1, 2, 3]"", ""harness"": ""print(rotate_window([1,2,3,4], 1))""}, {""expected"": ""[8, 9]"", ""harness"": ""print(rotate_window([9,8], 3))""}]}","bug_fix_and_patch_reasoning","ready","True","1","90","rw-a2-046","lcb-testgen-2785-1; lcb-testgen-2785-2","Privateized A2/bug_fix_and_patch_reasoning item derived from LiveCodeBench.","QB-v1.1 A2 bug-fix item inspired by EvalPlus / SWE-bench Lite single-function repair."
+"A2-047","QB-v1.2","A2","bug_fix_and_patch_reasoning","single_turn","hard","capability","下面的 Python 函数有一个逻辑错误，请修复它并只输出修复后的完整函数代码，不要解释。
+错误说明：应只统计字母，忽略空格和标点，并且大小写不敏感。
+```python
+def count_distinct_letters(text):
+    return len(set(text))
+```","","","exec","{""bug_fix"": true, ""response_max_tokens"": 1536, ""tests"": [{""expected"": ""2"", ""harness"": ""print(count_distinct_letters('Aa, b!'))""}, {""expected"": ""3"", ""harness"": ""print(count_distinct_letters('XYZ'))""}]}","bug_fix_and_patch_reasoning","ready","True","1","90","rw-a2-047","lcb-testgen-2785-2; lcb-testgen-2786-0","Privateized A2/bug_fix_and_patch_reasoning item derived from LiveCodeBench.","QB-v1.1 A2 bug-fix item inspired by EvalPlus / SWE-bench Lite single-function repair."
+"A2-048","QB-v1.2","A2","bug_fix_and_patch_reasoning","single_turn","hard","capability","下面的 Python 函数有一个逻辑错误，请修复它并只输出修复后的完整函数代码，不要解释。
+错误说明：去重后应保留首次出现顺序，不应整体反转。
+```python
+def squash_segments(parts):
+    result = []
+    for part in parts:
+        if part not in result:
+            result.append(part)
+    return result[::-1]
+```","","","exec","{""bug_fix"": true, ""response_max_tokens"": 1536, ""tests"": [{""expected"": ""['x', 'y', 'z']"", ""harness"": ""print(squash_segments(['x','y','x','z']))""}, {""expected"": ""['a']"", ""harness"": ""print(squash_segments(['a']))""}]}","bug_fix_and_patch_reasoning","ready","True","1","90","rw-a2-048","lcb-testgen-2786-0; lcb-testgen-2786-1","Privateized A2/bug_fix_and_patch_reasoning item derived from LiveCodeBench.","QB-v1.1 A2 bug-fix item inspired by EvalPlus / SWE-bench Lite single-function repair."
+"A2-049","QB-v1.2","A2","bug_fix_and_patch_reasoning","single_turn","hard","capability","下面的 Python 函数有一个逻辑错误，请修复它并只输出修复后的完整函数代码，不要解释。
+错误说明：重叠区间合并时应扩展到更大的 end，而不是更小的 end。
+```python
+def merge_ranges(ranges):
+    ranges = sorted(ranges)
+    out = []
+    for start, end in ranges:
+        if not out or start > out[-1][1]:
+            out.append([start, end])
+        else:
+            out[-1][1] = min(out[-1][1], end)
+    return [(a, b) for a, b in out]
+```","","","exec","{""bug_fix"": true, ""response_max_tokens"": 1536, ""tests"": [{""expected"": ""[(1, 5), (8, 9)]"", ""harness"": ""print(merge_ranges([(1,3),(2,5),(8,9)]))""}, {""expected"": ""[]"", ""harness"": ""print(merge_ranges([]))""}]}","bug_fix_and_patch_reasoning","ready","True","1","90","rw-a2-049","lcb-testgen-2786-1; lcb-testgen-2786-2","Privateized A2/bug_fix_and_patch_reasoning item derived from LiveCodeBench.","QB-v1.1 A2 bug-fix item inspired by EvalPlus / SWE-bench Lite single-function repair."
+"A2-050","QB-v1.2","A2","bug_fix_and_patch_reasoning","single_turn","hard","capability","下面的 Python 函数有一个逻辑错误，请修复它并只输出修复后的完整函数代码，不要解释。
+错误说明：应保留原顺序，不应排序。
+```python
+def format_board(rows):
+    return '\n'.join(sorted(rows))
+```","","","exec","{""bug_fix"": true, ""response_max_tokens"": 1536, ""tests"": [{""expected"": ""b..\na.."", ""harness"": ""print(format_board(['b..','a..']))""}, {""expected"": ""xx"", ""harness"": ""print(format_board(['xx']))""}]}","bug_fix_and_patch_reasoning","ready","True","1","90","rw-a2-050","lcb-testgen-2786-2; lcb-testgen-2791-0","Privateized A2/bug_fix_and_patch_reasoning item derived from LiveCodeBench.","QB-v1.1 A2 bug-fix item inspired by EvalPlus / SWE-bench Lite single-function repair."

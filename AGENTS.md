@@ -232,6 +232,12 @@ cd "LLM Evaluation/question_bank_workspace"
 | GET | `/api/bank/items` | 浏览题库（分页/筛选） |
 | GET | `/api/bank/facets` | 题库 facet 统计 |
 | GET | `/api/bank/items/{qid}` | 获取单题详情 |
+| POST | `/api/bank/items` | 新增题目 |
+| PUT | `/api/bank/items/{qid}` | 修改题目 |
+| DELETE | `/api/bank/items/{qid}` | 删除题目 |
+| POST | `/api/bank/items/{qid}/archive` | 归档题目（置为 `retired`） |
+| POST | `/api/bank/items/{qid}/restore` | 恢复题目（默认回到 `ready`） |
+| POST | `/api/bank/items/bulk-action` | 批量归档 / 恢复 / 删除题目 |
 
 ## 6. MiniMax 配置约定
 

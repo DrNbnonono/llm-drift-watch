@@ -1,0 +1,151 @@
+﻿"question_id","version","module","subtype","item_format","difficulty","drift_role","prompt_template","turn_script","ground_truth","scoring_method","scoring_params","module_quota_tag","qa_status","rotation_replaceable","rotation_priority","rotation_expected_lifespan_days","provenance_rewrite_ids","provenance_source_candidate_ids","provenance_transformation_summary","notes"
+"A4-001","QB-v1.2","A4","reading_comprehension","single_turn","easy","capability","Context:
+A small harbor town publishes a weekly bulletin. This week it announced that the ferry route to Pine Island will leave at 08:10, 12:40, and 18:20. The local museum extends its Saturday opening by one hour, from 09:00-17:00 to 09:00-18:00.
+
+Question: What time is the final ferry departure?","","18:20","span_em_f1","{""all_answers"": [""18:20""]}","reading","ready","True","1","90","rw-a4-001","cnn-dailymail-a4942dd663020ca54575471657a0af38d82897d6","Privateized A4/reading_comprehension item derived from CNN/DailyMail.",""
+"A4-002","QB-v1.2","A4","reading_comprehension","single_turn","easy","capability","Context:
+The monitoring team rotated on-call duties every Monday. Mei covered week 1, Arjun week 2, and Sofia week 3. A note at the bottom says the coffee machine was serviced on Tuesday.
+
+Question: Who covered week 2?","","Arjun","span_em_f1","{""all_answers"": [""Arjun""]}","reading","ready","True","1","90","rw-a4-002","cnn-dailymail-4157bc4da185971e2742f349d69a037343bc0d95","Privateized A4/reading_comprehension item derived from CNN/DailyMail.",""
+"A4-003","QB-v1.2","A4","reading_comprehension","single_turn","easy","capability","Context:
+An archive lists three storage rooms. Room A holds maps, Room B holds audio recordings, and Room C holds photography negatives. The renovation notice says only Room B will close next month.
+
+Question: Which room stores audio recordings?","","Room B","span_em_f1","{""all_answers"": [""Room B""]}","reading","ready","True","1","90","rw-a4-003","cnn-dailymail-60736693e3b1b32d14337a317190c6606e879a85","Privateized A4/reading_comprehension item derived from CNN/DailyMail.",""
+"A4-004","QB-v1.2","A4","reading_comprehension","single_turn","easy","capability","Context:
+The city trialed smart lights on Oak Street, River Avenue, and North Plaza. Oak Street reduced energy use by 12%, River Avenue by 9%, and North Plaza by 15%.
+
+Question: Which location had the largest reduction?","","North Plaza","span_em_f1","{""all_answers"": [""North Plaza""]}","reading","ready","True","1","90","rw-a4-004","cnn-dailymail-8cdf9cc3ed0276b7a7944cc18ba459355b5984ad","Privateized A4/reading_comprehension item derived from CNN/DailyMail.",""
+"A4-005","QB-v1.2","A4","reading_comprehension","single_turn","easy","capability","Context:
+A student team built sensors for temperature, humidity, and vibration. The vibration sensor needed recalibration after shipping, but the others passed immediately.
+
+Question: Which sensor needed recalibration?","","vibration sensor","span_em_f1","{""all_answers"": [""vibration sensor""]}","reading","ready","True","1","90","rw-a4-005","cnn-dailymail-2e6613d531843515bf5401286cc3e45c4df530d2","Privateized A4/reading_comprehension item derived from CNN/DailyMail.",""
+"A4-006","QB-v1.2","A4","reading_comprehension","single_turn","easy","capability","Context:
+The field report says plot 1 received 14 mm of rain, plot 2 received 18 mm, and plot 3 received 16 mm. The tractor battery was replaced the same afternoon.
+
+Question: How much rain did plot 2 receive?","","18 mm","span_em_f1","{""all_answers"": [""18 mm""]}","reading","ready","True","1","90","rw-a4-006","cnn-dailymail-fbc5ac3a3a7bb6c4d628cfbeef92b67bb18562f9","Privateized A4/reading_comprehension item derived from CNN/DailyMail.",""
+"A4-007","QB-v1.2","A4","reading_comprehension","single_turn","easy","capability","Context:
+The workshop schedule lists registration at 09:15, keynote at 10:00, and panel discussion at 14:00. Lunch is served at noon.
+
+Question: When does the keynote begin?","","10:00","span_em_f1","{""all_answers"": [""10:00""]}","reading","ready","True","1","90","rw-a4-007","cnn-dailymail-d093aa07380f75e63265793fcaa171772a6f4616","Privateized A4/reading_comprehension item derived from CNN/DailyMail.",""
+"A4-008","QB-v1.2","A4","reading_comprehension","single_turn","easy","capability","Context:
+The library budget reserves 40% for digital access, 35% for staffing, and 25% for events. A separate note mentions the lobby plants were watered.
+
+Question: What share is reserved for staffing?","","35%","span_em_f1","{""all_answers"": [""35%""]}","reading","ready","True","1","90","rw-a4-008","cnn-dailymail-0485e4f199828cd03857391cbe573142193ca953","Privateized A4/reading_comprehension item derived from CNN/DailyMail.",""
+"A4-009","QB-v1.2","A4","reading_comprehension","single_turn","easy","capability","Context:
+A biology lab stores samples in freezer A at -20C, freezer B at -80C, and refrigerator C at 4C. The emergency contact sheet hangs on the door.
+
+Question: Which freezer runs at -80C?","","freezer B","span_em_f1","{""all_answers"": [""freezer B""]}","reading","ready","True","1","90","rw-a4-009","cnn-dailymail-c6df0bbd0b5eaa67e1f2b70892bf0a5dfb761895","Privateized A4/reading_comprehension item derived from CNN/DailyMail.",""
+"A4-010","QB-v1.2","A4","reading_comprehension","single_turn","easy","capability","Context:
+The memo says the red team owns API alerts, the blue team owns database alerts, and the green team owns deployment alerts.
+
+Question: Which team owns deployment alerts?","","green team","span_em_f1","{""all_answers"": [""green team""]}","reading","ready","True","1","90","rw-a4-010","cnn-dailymail-4a323dd3a1be975d93e941361082937cd2aafc88","Privateized A4/reading_comprehension item derived from CNN/DailyMail.",""
+"A4-011","QB-v1.2","A4","summarization","single_turn","medium","capability","Summarize the following article in 45-75 English words.
+
+Article:
+The coastal rail authority published a one-page update. It said weekend trains would shift to a reduced timetable for six weeks while bridge repainting continued. Crews would work overnight to avoid commuter disruption. The authority also promised extra station staff and clearer platform signage.","","Weekend trains will run on a reduced timetable for six weeks while bridge repainting continues. Overnight work is meant to limit commuter disruption, and the authority will add station staff and clearer platform signs.","rouge_l","{""max_words"": 75, ""min_words"": 45}","summary","ready","True","1","90","rw-a4-011","cnn-dailymail-bdf542b05c1717ae9ef064e5fafa4a2946785d09","Privateized A4/summarization item derived from CNN/DailyMail.",""
+"A4-012","QB-v1.2","A4","summarization","single_turn","medium","capability","Summarize the following article in 45-75 English words.
+
+Article:
+A university launched a small grant program for student climate projects. Awards will range from 500 to 3000 dollars. Teams must submit a one-page plan, a budget, and a faculty sponsor letter. Finalists will present in late October.","","The university created a student climate grant program offering 500 to 3000 dollars. Applicants need a short plan, budget, and faculty sponsor letter, and finalists will present in late October.","rouge_l","{""max_words"": 75, ""min_words"": 45}","summary","ready","True","1","90","rw-a4-012","cnn-dailymail-c2be332536700d93414c42c72ae38e21c98dee63","Privateized A4/summarization item derived from CNN/DailyMail.",""
+"A4-013","QB-v1.2","A4","summarization","single_turn","medium","capability","Summarize the following article in 45-75 English words.
+
+Article:
+The city food bank reported a strong month for donations after three neighborhood drives. Shelf-stable meals, baby formula, and hygiene kits were the most requested items. Organizers said volunteer shifts for sorting and home delivery remain open every Thursday evening.","","Three neighborhood drives boosted donations to the city food bank. The most needed items are shelf-stable meals, baby formula, and hygiene kits, while Thursday evening volunteer shifts for sorting and delivery are still open.","rouge_l","{""max_words"": 75, ""min_words"": 45}","summary","ready","True","1","90","rw-a4-013","cnn-dailymail-14c1b26ea2b78196c2d1cf3a5882aedb2f6558aa","Privateized A4/summarization item derived from CNN/DailyMail.",""
+"A4-014","QB-v1.2","A4","summarization","single_turn","medium","capability","Summarize the following article in 45-75 English words.
+
+Article:
+A software team completed a two-week reliability sprint. They reduced alert noise, removed duplicate dashboards, and documented recovery steps for the top five incidents. A follow-up sprint will focus on database failover drills.","","During a two-week reliability sprint, the software team reduced alert noise, removed duplicate dashboards, and documented responses for the top five incidents. The next sprint will focus on database failover drills.","rouge_l","{""max_words"": 75, ""min_words"": 45}","summary","ready","True","1","90","rw-a4-014","cnn-dailymail-f4a21564e3c65809f110b832138f2a3cf5b019cc","Privateized A4/summarization item derived from CNN/DailyMail.",""
+"A4-015","QB-v1.2","A4","summarization","single_turn","medium","capability","Summarize the following article in 45-75 English words.
+
+Article:
+A regional hospital opened a new outpatient imaging wing. The wing adds two MRI rooms, one CT room, and a shared consultation area. Leadership expects average scheduling delays to fall by roughly 20 percent by the end of the quarter.","","The hospital opened an outpatient imaging wing with two MRI rooms, one CT room, and a consultation area. Leaders expect scheduling delays to drop about 20 percent by quarter end.","rouge_l","{""max_words"": 75, ""min_words"": 45}","summary","ready","True","1","90","rw-a4-015","cnn-dailymail-0bcc5c7a3e66e114aaa39dcca83d4656d5978022","Privateized A4/summarization item derived from CNN/DailyMail.",""
+"A4-016","QB-v1.2","A4","summarization","single_turn","medium","capability","Summarize the following article in 45-75 English words.
+
+Article:
+The agriculture office warned that early heat could stress young rice plants. It advised farmers to increase morning irrigation checks and delay fertilizer application until cooler conditions return. Inspectors will publish a follow-up bulletin next Tuesday.","","The agriculture office warned that early heat may stress young rice plants. Farmers are advised to check morning irrigation more often and postpone fertilizer until cooler weather, with another bulletin due next Tuesday.","rouge_l","{""max_words"": 75, ""min_words"": 45}","summary","ready","True","1","90","rw-a4-016","cnn-dailymail-43276372450d31aad099a3cfc1f5fe931a419329","Privateized A4/summarization item derived from CNN/DailyMail.",""
+"A4-017","QB-v1.2","A4","summarization","single_turn","medium","capability","Summarize the following article in 45-75 English words.
+
+Article:
+A nonprofit upgraded its literacy program by adding tablet-based reading exercises, weekend tutor sessions, and progress dashboards for parents. Program managers said the goal is to help students practice more consistently between school days.","","The nonprofit expanded its literacy program with tablet reading exercises, weekend tutoring, and parent dashboards. The changes aim to help students practice more consistently outside regular school days.","rouge_l","{""max_words"": 75, ""min_words"": 45}","summary","ready","True","1","90","rw-a4-017","cnn-dailymail-10f9d53382cb52d77c1090e9ebf062bf8cb64f59","Privateized A4/summarization item derived from CNN/DailyMail.",""
+"A4-018","QB-v1.2","A4","summarization","single_turn","medium","capability","Summarize the following article in 45-75 English words.
+
+Article:
+A museum restored a 19th-century clock tower after structural surveys found water damage. Conservators repaired the gears, sealed the roof, and digitized maintenance records. The tower will reopen with guided visits twice each afternoon.","","After surveys found water damage, the museum restored the 19th-century clock tower by repairing gears, sealing the roof, and digitizing maintenance records. It will reopen with guided visits twice each afternoon.","rouge_l","{""max_words"": 75, ""min_words"": 45}","summary","ready","True","1","90","rw-a4-018","cnn-dailymail-9b040dde80ca3388e9ce9512bb270c2a9e72f1de","Privateized A4/summarization item derived from CNN/DailyMail.",""
+"A4-019","QB-v1.2","A4","summarization","single_turn","medium","capability","Summarize the following article in 45-75 English words.
+
+Article:
+A logistics company piloted reusable packaging on two intercity routes. It found that return rates improved when drivers collected empty containers during the next scheduled delivery rather than through a separate pickup.","","The logistics company found reusable packaging worked better on two intercity routes when drivers collected empty containers during the next scheduled delivery instead of a separate pickup.","rouge_l","{""max_words"": 75, ""min_words"": 45}","summary","ready","True","1","90","rw-a4-019","cnn-dailymail-dc0f01376a2e0cfe8dff118a43eae341ac24cf41","Privateized A4/summarization item derived from CNN/DailyMail.",""
+"A4-020","QB-v1.2","A4","summarization","single_turn","medium","capability","Summarize the following article in 45-75 English words.
+
+Article:
+A public broadcaster reorganized its newsletter lineup. The morning edition will focus on short explainers, the evening edition on analysis, and a weekly Saturday issue on long-form interviews. Subscribers can now choose one, two, or all three editions.","","The broadcaster split its newsletters into a morning explainer edition, an evening analysis edition, and a weekly Saturday interview edition. Subscribers can choose any combination of the three.","rouge_l","{""max_words"": 75, ""min_words"": 45}","summary","ready","True","1","90","rw-a4-020","cnn-dailymail-223f2d2ff1fa774a816c9dbd0253e8d158b6bc7d","Privateized A4/summarization item derived from CNN/DailyMail.",""
+"A4-021","QB-v1.2","A4","multi_hop_qa","single_turn","medium","capability","Context A:
+The first rover landed in Sector East and collected dust samples.
+
+Context B:
+Only the rover carrying dust samples returned before sunset.
+
+Question: Which rover returned before sunset?","","the rover in Sector East","multi_hop_answer_match","{""all_answers"": [""the rover in Sector East""]}","multi_hop","ready","True","1","90","rw-a4-021","cnn-dailymail-ae99cbf7b2eff2e7468c3282a992863556b0f3b1","Privateized A4/multi_hop_qa item derived from CNN/DailyMail.",""
+"A4-022","QB-v1.2","A4","multi_hop_qa","single_turn","medium","capability","Context A:
+Mira manages the archive team. The archive team shares a floor with the audio lab.
+
+Context B:
+The team sharing a floor with the audio lab will lead Friday's demo.
+
+Question: Who will lead Friday's demo?","","Mira","multi_hop_answer_match","{""all_answers"": [""Mira""]}","multi_hop","ready","True","1","90","rw-a4-022","cnn-dailymail-64d7ee44a6d3c726d4f5d197c325fd728e02ec53","Privateized A4/multi_hop_qa item derived from CNN/DailyMail.",""
+"A4-023","QB-v1.2","A4","multi_hop_qa","single_turn","medium","capability","Context A:
+The blue warehouse stores paper records. Paper records need dehumidifiers during the rainy season.
+
+Context B:
+Any building that needs dehumidifiers will receive an inspection on Monday.
+
+Question: Which warehouse will receive an inspection on Monday?","","the blue warehouse","multi_hop_answer_match","{""all_answers"": [""the blue warehouse""]}","multi_hop","ready","True","1","90","rw-a4-023","cnn-dailymail-e7203d308fc92da3852e54616a1cfe7bc3d2066c","Privateized A4/multi_hop_qa item derived from CNN/DailyMail.",""
+"A4-024","QB-v1.2","A4","multi_hop_qa","single_turn","medium","capability","Context A:
+Line 4 connects Harbor Station to Hill Square.
+
+Context B:
+The line connecting Harbor Station is suspended this weekend.
+
+Question: Which line is suspended this weekend?","","Line 4","multi_hop_answer_match","{""all_answers"": [""Line 4""]}","multi_hop","ready","True","1","90","rw-a4-024","cnn-dailymail-8d730691304ac1b2aa00f033bca162d41a35bb4b","Privateized A4/multi_hop_qa item derived from CNN/DailyMail.",""
+"A4-025","QB-v1.2","A4","multi_hop_qa","single_turn","medium","capability","Context A:
+Project Lantern depends on the telemetry gateway.
+
+Context B:
+Any project that depends on the telemetry gateway must complete the security review first.
+
+Question: Which project must complete the security review first?","","Project Lantern","multi_hop_answer_match","{""all_answers"": [""Project Lantern""]}","multi_hop","ready","True","1","90","rw-a4-025","cnn-dailymail-2ccf1b3c6c99f113f51997fa901e13504ca11a49","Privateized A4/multi_hop_qa item derived from CNN/DailyMail.",""
+"A4-026","QB-v1.2","A4","multi_hop_qa","single_turn","medium","capability","Context A:
+Only reports tagged amber require director approval.
+
+Context B:
+The rainfall report was tagged amber after recalculation.
+
+Question: Which report requires director approval?","","the rainfall report","multi_hop_answer_match","{""all_answers"": [""the rainfall report""]}","multi_hop","ready","True","1","90","rw-a4-026","cnn-dailymail-a808527fc922d43981f743e8ef253783205deaf0","Privateized A4/multi_hop_qa item derived from CNN/DailyMail.",""
+"A4-027","QB-v1.2","A4","multi_hop_qa","single_turn","medium","capability","Context A:
+The seed lot from Farm 7 was placed in cold storage.
+
+Context B:
+Anything in cold storage will be audited next month.
+
+Question: What will be audited next month?","","the seed lot from Farm 7","multi_hop_answer_match","{""all_answers"": [""the seed lot from Farm 7""]}","multi_hop","ready","True","1","90","rw-a4-027","cnn-dailymail-08ac0d3791342869695f24bbb18e0e78b0771ff1","Privateized A4/multi_hop_qa item derived from CNN/DailyMail.",""
+"A4-028","QB-v1.2","A4","multi_hop_qa","single_turn","medium","capability","Context A:
+The trial with the smallest dropout rate advanced to phase two.
+
+Context B:
+Trial Cedars had the smallest dropout rate.
+
+Question: Which trial advanced to phase two?","","Trial Cedars","multi_hop_answer_match","{""all_answers"": [""Trial Cedars""]}","multi_hop","ready","True","1","90","rw-a4-028","cnn-dailymail-03fefc8c93587d4241eb782e25dd7525b0963392","Privateized A4/multi_hop_qa item derived from CNN/DailyMail.",""
+"A4-029","QB-v1.2","A4","multi_hop_qa","single_turn","medium","capability","Context A:
+The museum's west annex houses the textile exhibit.
+
+Context B:
+The exhibit in the west annex closes one hour later than the main hall.
+
+Question: Which exhibit closes later than the main hall?","","the textile exhibit","multi_hop_answer_match","{""all_answers"": [""the textile exhibit""]}","multi_hop","ready","True","1","90","rw-a4-029","cnn-dailymail-e3e023362d6b02ff98eaa7b9608655a3519a0001","Privateized A4/multi_hop_qa item derived from CNN/DailyMail.",""
+"A4-030","QB-v1.2","A4","multi_hop_qa","single_turn","medium","capability","Context A:
+Dana reviewed the contract with the shortest renewal window.
+
+Context B:
+The vendor network contract has the shortest renewal window.
+
+Question: Which contract did Dana review?","","the vendor network contract","multi_hop_answer_match","{""all_answers"": [""the vendor network contract""]}","multi_hop","ready","True","1","90","rw-a4-030","cnn-dailymail-b6d33bd44b3bdb42695474583a168d382ae4ffd5","Privateized A4/multi_hop_qa item derived from CNN/DailyMail.",""

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
+import tempfile
 import time
 import unittest
 from pathlib import Path
@@ -12,6 +14,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
+_TEST_DB_DIR = Path(tempfile.mkdtemp(prefix="qb-eval-test-"))
+os.environ.setdefault("QUESTION_BANK_SECRET_KEY", "test-master-key")
+os.environ["QUESTION_BANK_SQLITE_PATH"] = str(_TEST_DB_DIR / "evaluation.sqlite")
 
 from evaluation_api import app, service as api_service  # noqa: E402
 from evaluation_engine import EvaluationRunService, make_run_id, score_item  # noqa: E402

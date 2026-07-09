@@ -1,5 +1,12 @@
 [
   {
+    "source_key": "agentic_safety_modern",
+    "dataset": "benchmark-curated/agentic-safety-modern",
+    "split": "curated",
+    "output_file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/agentic_modern_safety_candidates.jsonl",
+    "count": 6
+  },
+  {
     "source_key": "apps_livecodebench_coding_curated",
     "dataset": "benchmark-curated/apps-livecodebench-coding",
     "split": "curated",
@@ -21,6 +28,13 @@
     "count": 12
   },
   {
+    "source_key": "boundary_truthfulness_modern",
+    "dataset": "benchmark-curated/boundary-truthfulness-modern",
+    "split": "curated",
+    "output_file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/boundary_truthfulness_safety_candidates.jsonl",
+    "count": 6
+  },
+  {
     "source_key": "cnn_dailymail",
     "dataset": "ccdv/cnn_dailymail",
     "split": "validation",
@@ -40,6 +54,13 @@
     "split": "train",
     "output_file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/gsm8k_candidates.jsonl",
     "count": 7473
+  },
+  {
+    "source_key": "harmbench_modern_safety",
+    "dataset": "benchmark-curated/harmbench-modern-safety",
+    "split": "curated",
+    "output_file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/harmbench_modern_safety_candidates.jsonl",
+    "count": 6
   },
   {
     "source_key": "hotpotqa",
@@ -82,6 +103,13 @@
     "split": "test",
     "output_file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/mmlu_pro_candidates.jsonl",
     "count": 12032
+  },
+  {
+    "source_key": "multiturn_jailbreak_modern",
+    "dataset": "benchmark-curated/multiturn-jailbreak-modern",
+    "split": "curated",
+    "output_file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/multiturn_modern_jailbreak_candidates.jsonl",
+    "count": 6
   },
   {
     "source_key": "or_bench_hard",

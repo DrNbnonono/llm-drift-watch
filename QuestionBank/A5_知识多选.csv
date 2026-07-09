@@ -1,0 +1,331 @@
+﻿"question_id","version","module","subtype","item_format","difficulty","drift_role","prompt_template","turn_script","ground_truth","scoring_method","scoring_params","module_quota_tag","qa_status","rotation_replaceable","rotation_priority","rotation_expected_lifespan_days","provenance_rewrite_ids","provenance_source_candidate_ids","provenance_transformation_summary","notes"
+"A5-001","QB-v1.2","A5","knowledge_mcq","single_turn","medium","capability","Which planet in the Solar System has the largest number of known moons listed here?
+
+选项：
+A. Earth
+B. Mars
+C. Jupiter
+D. Venus
+E. Mercury
+F. Pluto
+
+请简要说明理由，并在最后一行输出 `答案：[字母]`。","","C","em","{""options"": [""A. Earth"", ""B. Mars"", ""C. Jupiter"", ""D. Venus"", ""E. Mercury"", ""F. Pluto""]}","stem","ready","True","1","90","rw-a5-001","mmlu-pro-70","Privateized A5/knowledge_mcq item derived from MMLU-Pro.",""
+"A5-002","QB-v1.2","A5","knowledge_mcq","single_turn","medium","capability","Which blood cells are primarily responsible for carrying oxygen?
+
+选项：
+A. Platelets
+B. Red blood cells
+C. Neutrophils
+D. Plasma cells
+E. Basophils
+F. Lymph nodes
+
+请简要说明理由，并在最后一行输出 `答案：[字母]`。","","B","em","{""options"": [""A. Platelets"", ""B. Red blood cells"", ""C. Neutrophils"", ""D. Plasma cells"", ""E. Basophils"", ""F. Lymph nodes""]}","stem","ready","True","1","90","rw-a5-002","mmlu-pro-71","Privateized A5/knowledge_mcq item derived from MMLU-Pro.",""
+"A5-003","QB-v1.2","A5","knowledge_mcq","single_turn","medium","capability","Which quantity is measured in ohms?
+
+选项：
+A. Electric current
+B. Power
+C. Resistance
+D. Voltage
+E. Charge
+F. Frequency
+
+请简要说明理由，并在最后一行输出 `答案：[字母]`。","","C","em","{""options"": [""A. Electric current"", ""B. Power"", ""C. Resistance"", ""D. Voltage"", ""E. Charge"", ""F. Frequency""]}","stem","ready","True","1","90","rw-a5-003","mmlu-pro-72","Privateized A5/knowledge_mcq item derived from MMLU-Pro.",""
+"A5-004","QB-v1.2","A5","knowledge_mcq","single_turn","medium","capability","What is the derivative of x^2 with respect to x?
+
+选项：
+A. x
+B. 2x
+C. x^2
+D. 2
+E. 1/x
+F. 0
+
+请简要说明理由，并在最后一行输出 `答案：[字母]`。","","B","em","{""options"": [""A. x"", ""B. 2x"", ""C. x^2"", ""D. 2"", ""E. 1/x"", ""F. 0""]}","stem","ready","True","1","90","rw-a5-004","mmlu-pro-73","Privateized A5/knowledge_mcq item derived from MMLU-Pro.",""
+"A5-005","QB-v1.2","A5","knowledge_mcq","single_turn","medium","capability","Which gas is most abundant in Earth's atmosphere?
+
+选项：
+A. Oxygen
+B. Carbon dioxide
+C. Nitrogen
+D. Argon
+E. Hydrogen
+F. Helium
+
+请简要说明理由，并在最后一行输出 `答案：[字母]`。","","C","em","{""options"": [""A. Oxygen"", ""B. Carbon dioxide"", ""C. Nitrogen"", ""D. Argon"", ""E. Hydrogen"", ""F. Helium""]}","stem","ready","True","1","90","rw-a5-005","mmlu-pro-74","Privateized A5/knowledge_mcq item derived from MMLU-Pro.",""
+"A5-006","QB-v1.2","A5","knowledge_mcq","single_turn","medium","capability","Which organelle is the main site of ATP production in eukaryotic cells?
+
+选项：
+A. Nucleus
+B. Ribosome
+C. Golgi apparatus
+D. Mitochondrion
+E. Lysosome
+F. Vacuole
+
+请简要说明理由，并在最后一行输出 `答案：[字母]`。","","D","em","{""options"": [""A. Nucleus"", ""B. Ribosome"", ""C. Golgi apparatus"", ""D. Mitochondrion"", ""E. Lysosome"", ""F. Vacuole""]}","stem","ready","True","1","90","rw-a5-006","mmlu-pro-75","Privateized A5/knowledge_mcq item derived from MMLU-Pro.",""
+"A5-007","QB-v1.2","A5","knowledge_mcq","single_turn","medium","capability","Which scale is used to measure earthquake magnitude in many modern reports?
+
+选项：
+A. Beaufort scale
+B. Richter-style magnitude scale
+C. Mohs scale
+D. Kelvin scale
+E. pH scale
+F. Decibel scale
+
+请简要说明理由，并在最后一行输出 `答案：[字母]`。","","B","em","{""options"": [""A. Beaufort scale"", ""B. Richter-style magnitude scale"", ""C. Mohs scale"", ""D. Kelvin scale"", ""E. pH scale"", ""F. Decibel scale""]}","stem","ready","True","1","90","rw-a5-007","mmlu-pro-76","Privateized A5/knowledge_mcq item derived from MMLU-Pro.",""
+"A5-008","QB-v1.2","A5","knowledge_mcq","single_turn","medium","capability","What is the chemical symbol for sodium?
+
+选项：
+A. So
+B. Sd
+C. Na
+D. S
+E. N
+F. K
+
+请简要说明理由，并在最后一行输出 `答案：[字母]`。","","C","em","{""options"": [""A. So"", ""B. Sd"", ""C. Na"", ""D. S"", ""E. N"", ""F. K""]}","stem","ready","True","1","90","rw-a5-008","mmlu-pro-77","Privateized A5/knowledge_mcq item derived from MMLU-Pro.",""
+"A5-009","QB-v1.2","A5","knowledge_mcq","single_turn","medium","capability","Which process converts liquid water into vapor below the boiling point?
+
+选项：
+A. Condensation
+B. Sublimation
+C. Evaporation
+D. Deposition
+E. Precipitation
+F. Filtration
+
+请简要说明理由，并在最后一行输出 `答案：[字母]`。","","C","em","{""options"": [""A. Condensation"", ""B. Sublimation"", ""C. Evaporation"", ""D. Deposition"", ""E. Precipitation"", ""F. Filtration""]}","stem","ready","True","1","90","rw-a5-009","mmlu-pro-78","Privateized A5/knowledge_mcq item derived from MMLU-Pro.",""
+"A5-010","QB-v1.2","A5","knowledge_mcq","single_turn","medium","capability","Which number is a prime number?
+
+选项：
+A. 21
+B. 39
+C. 51
+D. 53
+E. 57
+F. 63
+
+请简要说明理由，并在最后一行输出 `答案：[字母]`。","","D","em","{""options"": [""A. 21"", ""B. 39"", ""C. 51"", ""D. 53"", ""E. 57"", ""F. 63""]}","stem","ready","True","1","90","rw-a5-010","mmlu-pro-79","Privateized A5/knowledge_mcq item derived from MMLU-Pro.",""
+"A5-011","QB-v1.2","A5","knowledge_mcq","single_turn","medium","capability","Which economist is most associated with the idea of comparative advantage?
+
+选项：
+A. Adam Smith
+B. David Ricardo
+C. John Maynard Keynes
+D. Milton Friedman
+E. Karl Marx
+F. Joseph Schumpeter
+
+请简要说明理由，并在最后一行输出 `答案：[字母]`。","","B","em","{""options"": [""A. Adam Smith"", ""B. David Ricardo"", ""C. John Maynard Keynes"", ""D. Milton Friedman"", ""E. Karl Marx"", ""F. Joseph Schumpeter""]}","hum","ready","True","1","90","rw-a5-011","mmlu-pro-80","Privateized A5/knowledge_mcq item derived from MMLU-Pro.",""
+"A5-012","QB-v1.2","A5","knowledge_mcq","single_turn","medium","capability","Which philosopher is known for the allegory of the cave?
+
+选项：
+A. Aristotle
+B. Descartes
+C. Plato
+D. Hobbes
+E. Hume
+F. Kant
+
+请简要说明理由，并在最后一行输出 `答案：[字母]`。","","C","em","{""options"": [""A. Aristotle"", ""B. Descartes"", ""C. Plato"", ""D. Hobbes"", ""E. Hume"", ""F. Kant""]}","hum","ready","True","1","90","rw-a5-012","mmlu-pro-81","Privateized A5/knowledge_mcq item derived from MMLU-Pro.",""
+"A5-013","QB-v1.2","A5","knowledge_mcq","single_turn","medium","capability","The Magna Carta was first issued in which year?
+
+选项：
+A. 1066
+B. 1215
+C. 1492
+D. 1642
+E. 1776
+F. 1914
+
+请简要说明理由，并在最后一行输出 `答案：[字母]`。","","B","em","{""options"": [""A. 1066"", ""B. 1215"", ""C. 1492"", ""D. 1642"", ""E. 1776"", ""F. 1914""]}","hum","ready","True","1","90","rw-a5-013","mmlu-pro-82","Privateized A5/knowledge_mcq item derived from MMLU-Pro.",""
+"A5-014","QB-v1.2","A5","knowledge_mcq","single_turn","medium","capability","Which field studies how language changes across social groups?
+
+选项：
+A. Semantics
+B. Phonetics
+C. Sociolinguistics
+D. Epigraphy
+E. Paleography
+F. Lexicography
+
+请简要说明理由，并在最后一行输出 `答案：[字母]`。","","C","em","{""options"": [""A. Semantics"", ""B. Phonetics"", ""C. Sociolinguistics"", ""D. Epigraphy"", ""E. Paleography"", ""F. Lexicography""]}","hum","ready","True","1","90","rw-a5-014","mmlu-pro-83","Privateized A5/knowledge_mcq item derived from MMLU-Pro.",""
+"A5-015","QB-v1.2","A5","knowledge_mcq","single_turn","medium","capability","Which country first adopted the euro in 1999 among the options below?
+
+选项：
+A. Poland
+B. Greece
+C. Germany
+D. Sweden
+E. Norway
+F. Hungary
+
+请简要说明理由，并在最后一行输出 `答案：[字母]`。","","C","em","{""options"": [""A. Poland"", ""B. Greece"", ""C. Germany"", ""D. Sweden"", ""E. Norway"", ""F. Hungary""]}","hum","ready","True","1","90","rw-a5-015","mmlu-pro-84","Privateized A5/knowledge_mcq item derived from MMLU-Pro.",""
+"A5-016","QB-v1.2","A5","knowledge_mcq","single_turn","medium","capability","Who wrote 'The Wealth of Nations'?
+
+选项：
+A. Adam Smith
+B. Max Weber
+C. Thomas Hobbes
+D. Friedrich Hayek
+E. John Stuart Mill
+F. Karl Popper
+
+请简要说明理由，并在最后一行输出 `答案：[字母]`。","","A","em","{""options"": [""A. Adam Smith"", ""B. Max Weber"", ""C. Thomas Hobbes"", ""D. Friedrich Hayek"", ""E. John Stuart Mill"", ""F. Karl Popper""]}","hum","ready","True","1","90","rw-a5-016","mmlu-pro-85","Privateized A5/knowledge_mcq item derived from MMLU-Pro.",""
+"A5-017","QB-v1.2","A5","knowledge_mcq","single_turn","medium","capability","Which historian is associated with the concept of the 'longue duree'?
+
+选项：
+A. Fernand Braudel
+B. Eric Hobsbawm
+C. Herodotus
+D. Toynbee
+E. Thucydides
+F. Tacitus
+
+请简要说明理由，并在最后一行输出 `答案：[字母]`。","","A","em","{""options"": [""A. Fernand Braudel"", ""B. Eric Hobsbawm"", ""C. Herodotus"", ""D. Toynbee"", ""E. Thucydides"", ""F. Tacitus""]}","hum","ready","True","1","90","rw-a5-017","mmlu-pro-86","Privateized A5/knowledge_mcq item derived from MMLU-Pro.",""
+"A5-018","QB-v1.2","A5","knowledge_mcq","single_turn","medium","capability","In literary analysis, a narrator who knows the thoughts of all characters is usually called what?
+
+选项：
+A. Limited narrator
+B. Unreliable narrator
+C. Omniscient narrator
+D. Objective narrator
+E. Framed narrator
+F. Chorus narrator
+
+请简要说明理由，并在最后一行输出 `答案：[字母]`。","","C","em","{""options"": [""A. Limited narrator"", ""B. Unreliable narrator"", ""C. Omniscient narrator"", ""D. Objective narrator"", ""E. Framed narrator"", ""F. Chorus narrator""]}","hum","ready","True","1","90","rw-a5-018","mmlu-pro-87","Privateized A5/knowledge_mcq item derived from MMLU-Pro.",""
+"A5-019","QB-v1.2","A5","knowledge_mcq","single_turn","medium","capability","Which revolution began in France in 1789?
+
+选项：
+A. July Revolution
+B. Haitian Revolution
+C. French Revolution
+D. Industrial Revolution
+E. Russian Revolution
+F. Glorious Revolution
+
+请简要说明理由，并在最后一行输出 `答案：[字母]`。","","C","em","{""options"": [""A. July Revolution"", ""B. Haitian Revolution"", ""C. French Revolution"", ""D. Industrial Revolution"", ""E. Russian Revolution"", ""F. Glorious Revolution""]}","hum","ready","True","1","90","rw-a5-019","mmlu-pro-88","Privateized A5/knowledge_mcq item derived from MMLU-Pro.",""
+"A5-020","QB-v1.2","A5","knowledge_mcq","single_turn","medium","capability","Which term describes government by the people, typically through elected representatives?
+
+选项：
+A. Oligarchy
+B. Monarchy
+C. Democracy
+D. Theocracy
+E. Autarky
+F. Technocracy
+
+请简要说明理由，并在最后一行输出 `答案：[字母]`。","","C","em","{""options"": [""A. Oligarchy"", ""B. Monarchy"", ""C. Democracy"", ""D. Theocracy"", ""E. Autarky"", ""F. Technocracy""]}","hum","ready","True","1","90","rw-a5-020","mmlu-pro-89","Privateized A5/knowledge_mcq item derived from MMLU-Pro.",""
+"A5-021","QB-v1.2","A5","knowledge_mcq","single_turn","hard","capability","Which vitamin deficiency is classically associated with scurvy?
+
+选项：
+A. Vitamin A
+B. Vitamin B12
+C. Vitamin C
+D. Vitamin D
+E. Vitamin E
+F. Vitamin K
+
+请简要说明理由，并在最后一行输出 `答案：[字母]`。","","C","em","{""options"": [""A. Vitamin A"", ""B. Vitamin B12"", ""C. Vitamin C"", ""D. Vitamin D"", ""E. Vitamin E"", ""F. Vitamin K""]}","lawmed","ready","True","1","90","rw-a5-021","mmlu-pro-90","Privateized A5/knowledge_mcq item derived from MMLU-Pro.",""
+"A5-022","QB-v1.2","A5","knowledge_mcq","single_turn","hard","capability","In many legal systems, habeas corpus is primarily used to challenge what?
+
+选项：
+A. Tax assessments
+B. Unlawful detention
+C. Contract pricing
+D. Patent scope
+E. Witness fees
+F. Property zoning
+
+请简要说明理由，并在最后一行输出 `答案：[字母]`。","","B","em","{""options"": [""A. Tax assessments"", ""B. Unlawful detention"", ""C. Contract pricing"", ""D. Patent scope"", ""E. Witness fees"", ""F. Property zoning""]}","lawmed","ready","True","1","90","rw-a5-022","mmlu-pro-91","Privateized A5/knowledge_mcq item derived from MMLU-Pro.",""
+"A5-023","QB-v1.2","A5","knowledge_mcq","single_turn","hard","capability","Which vital sign is measured in beats per minute?
+
+选项：
+A. Blood glucose
+B. Heart rate
+C. Oxygen saturation
+D. Body mass index
+E. Creatinine
+F. Hemoglobin
+
+请简要说明理由，并在最后一行输出 `答案：[字母]`。","","B","em","{""options"": [""A. Blood glucose"", ""B. Heart rate"", ""C. Oxygen saturation"", ""D. Body mass index"", ""E. Creatinine"", ""F. Hemoglobin""]}","lawmed","ready","True","1","90","rw-a5-023","mmlu-pro-92","Privateized A5/knowledge_mcq item derived from MMLU-Pro.",""
+"A5-024","QB-v1.2","A5","knowledge_mcq","single_turn","hard","capability","Which branch of law mainly governs agreements between private parties?
+
+选项：
+A. Criminal law
+B. Constitutional law
+C. Contract law
+D. Administrative law
+E. Maritime law
+F. Tax law
+
+请简要说明理由，并在最后一行输出 `答案：[字母]`。","","C","em","{""options"": [""A. Criminal law"", ""B. Constitutional law"", ""C. Contract law"", ""D. Administrative law"", ""E. Maritime law"", ""F. Tax law""]}","lawmed","ready","True","1","90","rw-a5-024","mmlu-pro-93","Privateized A5/knowledge_mcq item derived from MMLU-Pro.",""
+"A5-025","QB-v1.2","A5","knowledge_mcq","single_turn","hard","capability","Which condition is characterized by elevated blood glucose levels?
+
+选项：
+A. Hypertension
+B. Diabetes mellitus
+C. Asthma
+D. Anemia
+E. Osteoporosis
+F. Migraine
+
+请简要说明理由，并在最后一行输出 `答案：[字母]`。","","B","em","{""options"": [""A. Hypertension"", ""B. Diabetes mellitus"", ""C. Asthma"", ""D. Anemia"", ""E. Osteoporosis"", ""F. Migraine""]}","lawmed","ready","True","1","90","rw-a5-025","mmlu-pro-94","Privateized A5/knowledge_mcq item derived from MMLU-Pro.",""
+"A5-026","QB-v1.2","A5","knowledge_mcq","single_turn","hard","capability","A placebo-controlled trial is mainly used to assess what?
+
+选项：
+A. Court precedent
+B. Treatment efficacy
+C. Building safety
+D. Tax compliance
+E. Patent novelty
+F. Currency risk
+
+请简要说明理由，并在最后一行输出 `答案：[字母]`。","","B","em","{""options"": [""A. Court precedent"", ""B. Treatment efficacy"", ""C. Building safety"", ""D. Tax compliance"", ""E. Patent novelty"", ""F. Currency risk""]}","lawmed","ready","True","1","90","rw-a5-026","mmlu-pro-95","Privateized A5/knowledge_mcq item derived from MMLU-Pro.",""
+"A5-027","QB-v1.2","A5","knowledge_mcq","single_turn","hard","capability","In criminal procedure, the burden of proving guilt beyond a reasonable doubt usually rests on whom?
+
+选项：
+A. The defendant
+B. The prosecutor
+C. The jury foreperson
+D. The appellate court
+E. The arresting officer
+F. The defense witness
+
+请简要说明理由，并在最后一行输出 `答案：[字母]`。","","B","em","{""options"": [""A. The defendant"", ""B. The prosecutor"", ""C. The jury foreperson"", ""D. The appellate court"", ""E. The arresting officer"", ""F. The defense witness""]}","lawmed","ready","True","1","90","rw-a5-027","mmlu-pro-96","Privateized A5/knowledge_mcq item derived from MMLU-Pro.",""
+"A5-028","QB-v1.2","A5","knowledge_mcq","single_turn","hard","capability","Which blood group is often called the universal donor for red cell transfusion?
+
+选项：
+A. A positive
+B. AB positive
+C. O negative
+D. B negative
+E. AB negative
+F. O positive
+
+请简要说明理由，并在最后一行输出 `答案：[字母]`。","","C","em","{""options"": [""A. A positive"", ""B. AB positive"", ""C. O negative"", ""D. B negative"", ""E. AB negative"", ""F. O positive""]}","lawmed","ready","True","1","90","rw-a5-028","mmlu-pro-97","Privateized A5/knowledge_mcq item derived from MMLU-Pro.",""
+"A5-029","QB-v1.2","A5","knowledge_mcq","single_turn","hard","capability","What does informed consent in medicine primarily require?
+
+选项：
+A. Written payment terms only
+B. A clinician's intuition
+C. Adequate disclosure and voluntary agreement
+D. Court approval
+E. Family vote
+F. Insurance preauthorization only
+
+请简要说明理由，并在最后一行输出 `答案：[字母]`。","","C","em","{""options"": [""A. Written payment terms only"", ""B. A clinician's intuition"", ""C. Adequate disclosure and voluntary agreement"", ""D. Court approval"", ""E. Family vote"", ""F. Insurance preauthorization only""]}","lawmed","ready","True","1","90","rw-a5-029","mmlu-pro-98","Privateized A5/knowledge_mcq item derived from MMLU-Pro.",""
+"A5-030","QB-v1.2","A5","knowledge_mcq","single_turn","hard","capability","Which type of court opinion sets binding precedent in common-law systems when issued by a higher court?
+
+选项：
+A. Dissent
+B. Majority opinion
+C. Editorial note
+D. Oral summary
+E. Clerk memo
+F. Amicus letter
+
+请简要说明理由，并在最后一行输出 `答案：[字母]`。","","B","em","{""options"": [""A. Dissent"", ""B. Majority opinion"", ""C. Editorial note"", ""D. Oral summary"", ""E. Clerk memo"", ""F. Amicus letter""]}","lawmed","ready","True","1","90","rw-a5-030","mmlu-pro-99","Privateized A5/knowledge_mcq item derived from MMLU-Pro.",""

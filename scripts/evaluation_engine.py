@@ -618,16 +618,22 @@ class EvaluationRunService:
             return None
         return {
             "question_id": item["question_id"],
+            "version": item.get("version"),
             "module": item["module"],
             "subtype": item.get("subtype"),
             "item_format": item["item_format"],
+            "difficulty": item.get("difficulty"),
+            "drift_role": item.get("drift_role"),
             "prompt_template": item.get("prompt_template"),
             "turn_script": item.get("turn_script"),
             "ground_truth": item.get("ground_truth"),
             "scoring_method": item.get("scoring_method"),
             "scoring_params": item.get("scoring_params"),
+            "module_quota_tag": item.get("module_quota_tag"),
+            "qa_status": item.get("qa_status", "ready"),
             "rotation_policy": item.get("rotation_policy"),
             "provenance": item.get("provenance"),
+            "notes": item.get("notes", ""),
         }
 
     def get_system_paths(self) -> dict[str, str]:
@@ -707,21 +713,191 @@ class EvaluationRunService:
     def list_bank_items(
         self,
         *,
+        version: str | None = None,
         module: str | None = None,
         subtype: str | None = None,
         item_format: str | None = None,
+        qa_status: str | None = None,
+        include_archived: bool = True,
         keyword: str | None = None,
         offset: int = 0,
         limit: int = 50,
     ) -> dict[str, Any]:
         return self.store.list_bank_items(
+            version=version,
             module=module,
             subtype=subtype,
             item_format=item_format,
+            qa_status=qa_status,
+            include_archived=include_archived,
             keyword=keyword,
             offset=offset,
             limit=limit,
         )
+
+    def _refresh_bank_index(self) -> None:
+        try:
+            self.bank_items = load_bank_items()
+            self.bank_item_index = {item["question_id"]: item for item in self.bank_items}
+        except FileNotFoundError:
+            self.bank_items = []
+            self.bank_item_index = {}
+
+    def _persist_bank_to_jsonl(self) -> None:
+        items = self.store.get_all_bank_items()
+        items.sort(key=lambda row: row.get("question_id", ""))
+        path = FINAL_BANK / "generated" / "final_bank_items.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w", encoding="utf-8") as handle:
+            for item in items:
+                handle.write(json.dumps(item, ensure_ascii=False) + "\n")
+        self._refresh_bank_index()
+
+    @staticmethod
+    def _normalize_bank_payload(payload: dict[str, Any]) -> dict[str, Any]:
+        question_id = str(payload.get("question_id") or "").strip()
+        if not question_id:
+            raise ValueError("question_id is required")
+        item_format = payload.get("item_format") or "single_turn"
+        if item_format not in ("single_turn", "multi_turn_group"):
+            raise ValueError("item_format must be single_turn or multi_turn_group")
+        scoring_method = str(payload.get("scoring_method") or "").strip()
+        if not scoring_method:
+            raise ValueError("scoring_method is required")
+        rotation_policy = payload.get("rotation_policy") or {
+            "replaceable": True,
+            "rotation_priority": 1,
+        }
+        if "replaceable" not in rotation_policy:
+            rotation_policy["replaceable"] = True
+        if "rotation_priority" not in rotation_policy:
+            rotation_policy["rotation_priority"] = 1
+        provenance = payload.get("provenance") or {}
+        if not provenance.get("transformation_summary"):
+            provenance["transformation_summary"] = "Created/edited from the question bank management UI."
+        if not provenance.get("rewrite_ids"):
+            provenance["rewrite_ids"] = []
+        if not provenance.get("source_candidate_ids"):
+            provenance["source_candidate_ids"] = []
+        qa_status = payload.get("qa_status") or "ready"
+        if qa_status not in ("draft", "pilot", "ready", "frozen", "retired"):
+            raise ValueError("qa_status must be one of draft, pilot, ready, frozen, retired")
+        result = {
+            "question_id": question_id,
+            "version": payload.get("version") or "QB-v1.2",
+            "module": str(payload.get("module") or "").strip(),
+            "subtype": payload.get("subtype") or None,
+            "item_format": item_format,
+            "difficulty": payload.get("difficulty"),
+            "drift_role": payload.get("drift_role") or "capability",
+            "prompt_template": payload.get("prompt_template") or None,
+            "turn_script": payload.get("turn_script") or None,
+            "ground_truth": payload.get("ground_truth"),
+            "scoring_method": scoring_method,
+            "scoring_params": payload.get("scoring_params") or {},
+            "module_quota_tag": payload.get("module_quota_tag") or None,
+            "qa_status": qa_status,
+            "rotation_policy": rotation_policy,
+            "provenance": provenance,
+            "notes": payload.get("notes") or "",
+        }
+        if not result["module"]:
+            raise ValueError("module is required")
+        return result
+
+    def create_bank_item(self, payload: dict[str, Any]) -> dict[str, Any]:
+        normalized = self._normalize_bank_payload(payload)
+        try:
+            self.store.create_bank_item(normalized)
+        except ValueError:
+            raise
+        self._persist_bank_to_jsonl()
+        return self.get_bank_item(normalized["question_id"]) or normalized
+
+    def update_bank_item(self, question_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        payload = dict(payload)
+        payload["question_id"] = question_id
+        normalized = self._normalize_bank_payload(payload)
+        try:
+            self.store.update_bank_item(question_id, normalized)
+        except KeyError:
+            raise
+        self._persist_bank_to_jsonl()
+        return self.get_bank_item(question_id) or normalized
+
+    def delete_bank_item(self, question_id: str) -> bool:
+        deleted = self.store.delete_bank_item(question_id)
+        if deleted:
+            self._persist_bank_to_jsonl()
+        return deleted
+
+    def archive_bank_item(self, question_id: str) -> dict[str, Any] | None:
+        item = self.store.archive_bank_item(question_id)
+        if item:
+            self._persist_bank_to_jsonl()
+        return item
+
+    def restore_bank_item(
+        self, question_id: str, qa_status: str = "ready"
+    ) -> dict[str, Any] | None:
+        item = self.store.restore_bank_item(question_id, qa_status=qa_status)
+        if item:
+            self._persist_bank_to_jsonl()
+        return item
+
+    def bulk_bank_action(
+        self,
+        question_ids: list[str],
+        *,
+        action: str,
+        qa_status: str = "ready",
+    ) -> dict[str, Any]:
+        normalized_ids = []
+        for qid in question_ids:
+            qid = str(qid or "").strip()
+            if qid and qid not in normalized_ids:
+                normalized_ids.append(qid)
+        if not normalized_ids:
+            raise ValueError("question_ids is required")
+        if action not in {"archive", "restore", "delete"}:
+            raise ValueError("action must be archive, restore, or delete")
+
+        touched: list[str] = []
+        missing: list[str] = []
+        restored_items: list[dict[str, Any]] = []
+
+        for question_id in normalized_ids:
+            if action == "archive":
+                item = self.store.archive_bank_item(question_id)
+                if item:
+                    touched.append(question_id)
+                else:
+                    missing.append(question_id)
+            elif action == "restore":
+                item = self.store.restore_bank_item(question_id, qa_status=qa_status)
+                if item:
+                    touched.append(question_id)
+                    restored_items.append(item)
+                else:
+                    missing.append(question_id)
+            elif action == "delete":
+                deleted = self.store.delete_bank_item(question_id)
+                if deleted:
+                    touched.append(question_id)
+                else:
+                    missing.append(question_id)
+
+        if touched:
+            self._persist_bank_to_jsonl()
+
+        return {
+            "action": action,
+            "question_ids": touched,
+            "missing_question_ids": missing,
+            "count": len(touched),
+            "qa_status": qa_status if action == "restore" else None,
+            "items": restored_items if action == "restore" else [],
+        }
 
     def create_run(
         self,

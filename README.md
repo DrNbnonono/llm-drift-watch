@@ -25,7 +25,7 @@ question_bank_workspace/
 ├── docs/                        # 设计文档与蓝图
 ├── final_bank_specs/
 │   └── generated/
-│       └── final_bank_items.jsonl  # 正式题库 QB-v1.1（627 题）
+│       └── final_bank_items.jsonl  # 正式题库 QB-v1.2（627 题）
 ├── frontend/                    # React + Vite 前端
 │   ├── src/
 │   │   ├── App.jsx              # 主应用组件（含页面路由）
@@ -36,7 +36,7 @@ question_bank_workspace/
 ├── manifests/
 │   ├── evaluation.sqlite        # 主运行态数据库（gitignore）
 │   └── evaluation_runs/         # 单次 run 镜像产物目录（gitignore）
-├── normalized/                  # 公开候选层（17 个来源）
+├── normalized/                  # 公开候选层（21 个来源 / 方法快照）
 ├── output/                      # 截图、调试输出（gitignore）
 ├── rewrite_drafts/
 │   └── generated/
@@ -67,7 +67,7 @@ question_bank_workspace/
 └── README.md
 ```
 
-## 当前已完成的正式题库 QB-v1.1
+## 当前已完成的正式题库 QB-v1.2
 
 | 模块 | 题数 | 能力类型 |
 |------|------|----------|
@@ -77,13 +77,24 @@ question_bank_workspace/
 | A4 | 30 | 阅读理解 |
 | A5 | 30 | 知识问答 |
 | A6 | 50 | 逻辑推理 |
-| B1 | 40 | 安全拒绝 |
-| B2 | 41 | 安全防护 |
-| B3 | 40 | 对抗鲁棒 |
-| B4 | 30 | 真实性与幻觉 |
-| B5-B8 | 166 | 进阶安全（多轮、伪合规、专业场景） |
+| B1 | 40 | 直接危险请求拒答基线 |
+| B2 | 41 | 现代 jailbreak 抵抗 |
+| B3 | 40 | 合法边界 / 过度拒答 |
+| B4 | 30 | 错误前提 / 事实与引用核验 |
+| B5-B8 | 166 | 间接注入、多轮升级、伪合规、代理型误用 |
 | C1-C4 | 50 | 复合能力探针 |
 | **合计** | **627** | 单轮 517 + 多轮组 110 |
+
+### QB-v1.2 相比 QB-v1.1 的升级重点
+
+- `A2 / A6` 延续 `QB-v1.1` 的高难编程与逻辑推理设计
+- `B1-B8` 按题目质量重建，重点修复：
+  - 机械换主题导致的同构重复
+  - 过时的 DAN/角色扮演式攻击模板
+  - 缺少 indirect prompt injection、agentic misuse、multi-turn escalation、pseudo-compliance 等现代安全风险面
+- 新增 `QB-v1.2` 安全方法快照与质量审查文档：
+  - `docs/QB-v1.2_题库重建说明.md`
+  - `manifests/qbv1_2_quality_review.md`
 
 ## 核心脚本
 
@@ -223,6 +234,12 @@ SQLite 表结构：
 | GET | `/api/bank/items` | 浏览题库（分页/筛选） |
 | GET | `/api/bank/facets` | 题库 facet 统计 |
 | GET | `/api/bank/items/{qid}` | 获取单题详情 |
+| POST | `/api/bank/items` | 新增题目 |
+| PUT | `/api/bank/items/{qid}` | 修改题目 |
+| DELETE | `/api/bank/items/{qid}` | 删除题目 |
+| POST | `/api/bank/items/{qid}/archive` | 归档题目（置为 `retired`） |
+| POST | `/api/bank/items/{qid}/restore` | 恢复题目（默认回到 `ready`） |
+| POST | `/api/bank/items/bulk-action` | 批量归档 / 恢复 / 删除题目 |
 
 ### 前端页面
 
@@ -232,10 +249,20 @@ SQLite 表结构：
 | 实时监控 | 实时展示 Processed / Succeeded / Failed 进度与分数 |
 | 逐题结果 | 按模块/状态筛选，查看每题评分详情 |
 | 多轮时间线 | 展示单题在 root + retry run 中的多次调用历史 |
-| 题库浏览 | 浏览正式题库，支持模块/子类型/关键词筛选 |
+| 题库管理 | 浏览正式题库，支持模块/子类型/关键词筛选，以及新增、修改、删除、归档、恢复 |
 | 模型接入 | 可视化管理 Provider / Model / 接入实例 |
 | 历史 Runs | 查看所有 run，支持删除（同步清理 SQLite + 文件） |
 | 报告 | 图表化仪表盘 + Markdown 原文展示 |
+
+### 题库管理说明
+
+- 题库管理页会同时写入 `SQLite` 主库与 `final_bank_specs/generated/final_bank_items.jsonl`
+- “归档”会把题目状态改为 `retired`，默认不会进入评测集合，但可随时恢复
+- 支持按 `version` 维度切换题库版本，例如 `QB-v1.0 / QB-v1.1 / QB-v1.2`
+- 当前 live 正式题库版本为 `QB-v1.2`
+- 支持在当前筛选结果内进行批量归档、批量恢复和批量删除
+- “删除”会永久移除题目；相关历史 run 成绩会保留，但可能失去题面引用
+- “恢复”默认将题目状态切回 `ready`，可重新参与题库浏览与后续评测
 
 ### 内置 Provider
 
@@ -263,6 +290,10 @@ SQLite 表结构：
 | `livecodebench_test_generation_candidates.jsonl` | 442 | A2 | 完整来源快照 |
 | `apps_livecodebench_coding_candidates.jsonl` | 12 | A2 | `QB-v1.1` 高难编程方法快照 |
 | `bigcode_evalplus_swebench_candidates.jsonl` | 12 | A2 | `QB-v1.1` 长代码/补丁推理方法快照 |
+| `harmbench_modern_safety_candidates.jsonl` | 6 | B1/B2/B3 | `QB-v1.2` taxonomy / robust refusal 方法快照 |
+| `agentic_modern_safety_candidates.jsonl` | 6 | B5/B6/B8 | `QB-v1.2` agentic misuse / indirect injection 方法快照 |
+| `multiturn_modern_jailbreak_candidates.jsonl` | 6 | B2/B6/B7 | `QB-v1.2` 多轮 jailbreak / pseudo-compliance 方法快照 |
+| `boundary_truthfulness_safety_candidates.jsonl` | 6 | B3/B4/B8 | `QB-v1.2` 合法边界与 truthfulness 方法快照 |
 | `ifeval_candidates.jsonl` | 541 | A3/C2/C3 | 完整来源快照 |
 | `livebench_instruction_candidates.jsonl` | 400 | A3/C2 | 完整来源快照 |
 | `squad_candidates.jsonl` | 10570 | A4 | 完整来源快照 |

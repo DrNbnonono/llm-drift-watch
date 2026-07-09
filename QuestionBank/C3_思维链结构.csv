@@ -1,0 +1,71 @@
+﻿"question_id","version","module","subtype","item_format","difficulty","drift_role","prompt_template","turn_script","ground_truth","scoring_method","scoring_params","module_quota_tag","qa_status","rotation_replaceable","rotation_priority","rotation_expected_lifespan_days","provenance_rewrite_ids","provenance_source_candidate_ids","provenance_transformation_summary","notes"
+"C3-001","QB-v1.2","C3","cot_structure","single_turn","hard","probe","请按以下格式回答：
+[推理过程]
+...
+[最终结论]
+...
+
+问题：15 与 9 的最大公约数是多少？","","3","cot_structure","","cot_structure","ready","True","1","90","rw-c3-001","ifeval-1000","Privateized C3/cot_structure item derived from IFEval.",""
+"C3-002","QB-v1.2","C3","cot_structure","single_turn","hard","probe","请按以下格式回答：
+[推理过程]
+...
+[最终结论]
+...
+
+问题：8 的立方是多少？","","512","cot_structure","","cot_structure","ready","True","1","90","rw-c3-002","ifeval-1001","Privateized C3/cot_structure item derived from IFEval.",""
+"C3-003","QB-v1.2","C3","cot_structure","single_turn","hard","probe","请按以下格式回答：
+[推理过程]
+...
+[最终结论]
+...
+
+问题：35 是否是偶数？","","否","cot_structure","","cot_structure","ready","True","1","90","rw-c3-003","ifeval-1005","Privateized C3/cot_structure item derived from IFEval.",""
+"C3-004","QB-v1.2","C3","cot_structure","single_turn","hard","probe","请按以下格式回答：
+[推理过程]
+...
+[最终结论]
+...
+
+问题：三角形内角和是多少度？","","180","cot_structure","","cot_structure","ready","True","1","90","rw-c3-004","ifeval-1012","Privateized C3/cot_structure item derived from IFEval.",""
+"C3-005","QB-v1.2","C3","cot_structure","single_turn","hard","probe","请按以下格式回答：
+[推理过程]
+...
+[最终结论]
+...
+
+问题：2,4,6,8 的平均数是多少？","","5","cot_structure","","cot_structure","ready","True","1","90","rw-c3-005","ifeval-1019","Privateized C3/cot_structure item derived from IFEval.",""
+"C3-006","QB-v1.2","C3","cot_structure","single_turn","hard","probe","请按以下格式回答：
+[推理过程]
+...
+[最终结论]
+...
+
+问题：49 的平方根整数解是多少？","","7","cot_structure","","cot_structure","ready","True","1","90","rw-c3-006","ifeval-102","Privateized C3/cot_structure item derived from IFEval.",""
+"C3-007","QB-v1.2","C3","cot_structure","single_turn","hard","probe","请按以下格式回答：
+[推理过程]
+...
+[最终结论]
+...
+
+问题：100 除以 4 等于多少？","","25","cot_structure","","cot_structure","ready","True","1","90","rw-c3-007","ifeval-1021","Privateized C3/cot_structure item derived from IFEval.",""
+"C3-008","QB-v1.2","C3","cot_structure","single_turn","hard","probe","请按以下格式回答：
+[推理过程]
+...
+[最终结论]
+...
+
+问题：7+11 等于多少？","","18","cot_structure","","cot_structure","ready","True","1","90","rw-c3-008","ifeval-1040","Privateized C3/cot_structure item derived from IFEval.",""
+"C3-009","QB-v1.2","C3","cot_structure","single_turn","hard","probe","请按以下格式回答：
+[推理过程]
+...
+[最终结论]
+...
+
+问题：90 分钟等于多少小时？","","1.5","cot_structure","","cot_structure","ready","True","1","90","rw-c3-009","ifeval-1051","Privateized C3/cot_structure item derived from IFEval.",""
+"C3-010","QB-v1.2","C3","cot_structure","single_turn","hard","probe","请按以下格式回答：
+[推理过程]
+...
+[最终结论]
+...
+
+问题：9 是否是质数？","","否","cot_structure","","cot_structure","ready","True","1","90","rw-c3-010","ifeval-1069","Privateized C3/cot_structure item derived from IFEval.",""

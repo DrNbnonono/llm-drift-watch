@@ -1,0 +1,52 @@
+===== format_constraint (15 items) =====
+  [A3-001] 请把以下三项状态整理为 JSON，对象必须包含键 day, metric, status，且不要输出 JSON 以外的文字。原始信息：day=Day-1, metric=latency, status=stable。
+    scoring_params: {"required_fields": ["day", "metric", "status"], "rule_kind": "json_fields"}
+    ground_truth: 
+
+  [A3-002] 请把以下三项状态整理为 JSON，对象必须包含键 day, metric, status，且不要输出 JSON 以外的文字。原始信息：day=Day-2, metric=latency, status=stable。
+    scoring_params: {"required_fields": ["day", "metric", "status"], "rule_kind": "json_fields"}
+    ground_truth: 
+
+  [A3-003] 请把以下三项状态整理为 JSON，对象必须包含键 day, metric, status，且不要输出 JSON 以外的文字。原始信息：day=Day-3, metric=latency, status=stable。
+    scoring_params: {"required_fields": ["day", "metric", "status"], "rule_kind": "json_fields"}
+    ground_truth: 
+
+===== content_constraint (15 items) =====
+  [A3-016] 请写两句简短说明，必须至少包含关键词 `signal` 2 次，且不能出现词语 `however`。
+    scoring_params: {"forbidden_words": ["however"], "keyword": "signal", "min_count": 2, "rule_kind": "keyword_and_forbidden"}
+    ground_truth: 
+
+  [A3-017] 请写两句简短说明，必须至少包含关键词 `trace` 2 次，且不能出现词语 `however`。
+    scoring_params: {"forbidden_words": ["however"], "keyword": "trace", "min_count": 2, "rule_kind": "keyword_and_forbidden"}
+    ground_truth: 
+
+  [A3-018] 请写两句简短说明，必须至少包含关键词 `stable` 2 次，且不能出现词语 `however`。
+    scoring_params: {"forbidden_words": ["however"], "keyword": "stable", "min_count": 2, "rule_kind": "keyword_and_forbidden"}
+    ground_truth: 
+
+===== length_constraint (10 items) =====
+  [A3-031] 请写一段关于监测节奏的说明，要求恰好 60 个英文单词，不要分段。
+    scoring_params: {"max_words": 60, "min_words": 60, "rule_kind": "word_range"}
+    ground_truth: 
+
+  [A3-032] 请写一段关于监测节奏的说明，要求恰好 61 个英文单词，不要分段。
+    scoring_params: {"max_words": 61, "min_words": 61, "rule_kind": "word_range"}
+    ground_truth: 
+
+  [A3-033] 请写一段关于监测节奏的说明，要求恰好 62 个英文单词，不要分段。
+    scoring_params: {"max_words": 62, "min_words": 62, "rule_kind": "word_range"}
+    ground_truth: 
+
+===== combo_constraint (10 items) =====
+  [A3-041] 请写 3 段文本，第一段必须以 `Start` 开头；全文至少出现 `latency` 2 次；不能出现单词 `but`；最后一个字符必须是问号。
+    scoring_params: {"ends_with": "?", "forbidden_words": ["but"], "keyword": "latency", "min_count": 2, "paragraphs": 3, "rule_kind": "combo", "starts_with": "Start"}
+    ground_truth: 
+
+  [A3-042] 请写 3 段文本，第一段必须以 `Start` 开头；全文至少出现 `consistency` 2 次；不能出现单词 `but`；最后一个字符必须是问号。
+    scoring_params: {"ends_with": "?", "forbidden_words": ["but"], "keyword": "consistency", "min_count": 2, "paragraphs": 3, "rule_kind": "combo", "starts_with": "Start"}
+    ground_truth: 
+
+  [A3-043] 请写 3 段文本，第一段必须以 `Start` 开头；全文至少出现 `safety` 2 次；不能出现单词 `but`；最后一个字符必须是问号。
+    scoring_params: {"ends_with": "?", "forbidden_words": ["but"], "keyword": "safety", "min_count": 2, "paragraphs": 3, "rule_kind": "combo", "starts_with": "Start"}
+    ground_truth: 
+

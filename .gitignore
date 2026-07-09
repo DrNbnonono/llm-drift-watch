@@ -2,6 +2,7 @@
 manifests/evaluation_runs/
 manifests/evaluation_reports/
 manifests/evaluation.sqlite
+manifests\evaluation_reports
 output/
 *.log
 

@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import BankPage from "./BankPage.jsx";
 
 const API_BASE =
   import.meta.env.VITE_API_BASE ||
@@ -9,7 +11,7 @@ const RUN_VIEWS = [
   { key: "monitor", label: "实时监控" },
   { key: "items", label: "逐题结果" },
   { key: "timeline", label: "多轮时间线" },
-  { key: "bank", label: "题库浏览" },
+  { key: "bank", label: "题库管理" },
   { key: "models", label: "模型接入" },
   { key: "history", label: "历史 Runs" },
   { key: "reports", label: "报告" },
@@ -488,7 +490,7 @@ function ModalDialog({ open, title, subtitle, onClose, children }) {
   if (!open) {
     return null;
   }
-  return (
+  return createPortal(
     <div className="modal-backdrop" onClick={onClose} role="presentation">
       <div className="modal-card" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true">
         <div className="modal-header">
@@ -504,7 +506,8 @@ function ModalDialog({ open, title, subtitle, onClose, children }) {
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -741,6 +744,7 @@ function App() {
   const [bankPageSize, setBankPageSize] = useState(20);
   const [selectedHistoryRunIds, setSelectedHistoryRunIds] = useState([]);
   const [activeReportRunId, setActiveReportRunId] = useState(null);
+  const [historyDetailOpen, setHistoryDetailOpen] = useState(false);
 
   const [runForm, setRunForm] = useState({
     provider_id: "",
@@ -984,7 +988,7 @@ function App() {
   }, [selectedRunId, selectedRunItem, itemFilters.canonical_only, runIsActive, selectedRunCounts.processed]);
 
   useEffect(() => {
-    const shouldLock = showProviderForm || showModelForm || showConnectionForm;
+    const shouldLock = showProviderForm || showModelForm || showConnectionForm || historyDetailOpen;
     const previousOverflow = document.body.style.overflow;
     if (shouldLock) {
       document.body.style.overflow = "hidden";
@@ -992,7 +996,7 @@ function App() {
     return () => {
       document.body.style.overflow = previousOverflow;
     };
-  }, [showProviderForm, showModelForm, showConnectionForm]);
+  }, [showProviderForm, showModelForm, showConnectionForm, historyDetailOpen]);
 
   useEffect(() => {
     if (view !== "reports" || report || loadingReport) {
@@ -2102,99 +2106,14 @@ function App() {
         ) : null}
 
         {view === "bank" ? (
-          <section className="panel">
-            <SectionTitle title="题库浏览" meta={`当前命中 ${bankTotal} / 正式题总数 ${bankFacets.total || bankTotal}`} />
-            <PathList title="题库文件位置" paths={{ bank_items_path: systemPaths?.bank_items_path }} />
-            <div className="filters-row">
-              <label>
-                模块
-                <select value={bankFilters.module} onChange={(event) => setBankFilters((prev) => ({ ...prev, module: event.target.value }))}>
-                  <option value="">全部</option>
-                  {(bankFacets.modules || []).map((module) => <option key={module.value} value={module.value}>{module.value} ({module.count})</option>)}
-                </select>
-              </label>
-              <label>
-                子类
-                <select value={bankFilters.subtype} onChange={(event) => setBankFilters((prev) => ({ ...prev, subtype: event.target.value }))}>
-                  <option value="">全部</option>
-                  {availableBankSubtypes.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.value} ({item.count})
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                题型
-                <select value={bankFilters.item_format} onChange={(event) => setBankFilters((prev) => ({ ...prev, item_format: event.target.value }))}>
-                  <option value="">全部</option>
-                  {(bankFacets.item_formats || []).map((item) => (
-                    <option key={item.value} value={item.value}>{item.value} ({item.count})</option>
-                  ))}
-                </select>
-              </label>
-              <label className="filter-search">
-                关键词
-                <input value={bankFilters.keyword} onChange={(event) => setBankFilters((prev) => ({ ...prev, keyword: event.target.value }))} placeholder="题面关键词 / question id" />
-              </label>
-              <div className="inline-actions">
-                <button className="action-button secondary" type="button" onClick={resetBankFilters}>清空筛选</button>
-              </div>
-            </div>
-            <PaginationBar
-              page={bankPage}
-              pageSize={bankPageSize}
-              total={bankTotal}
-              onPageChange={setBankPage}
-              onPageSizeChange={(size) => {
-                setBankPageSize(size);
-                setBankPage(1);
-              }}
-            />
-            <div className="items-layout">
-              <div className="items-list">
-                {loadingBank ? <div className="muted-text">正在按筛选条件刷新题库…</div> : null}
-                {!loadingBank && !bankRows.length ? (
-                  <EmptyState
-                    title="当前筛选没有命中正式题"
-                    description={`模块=${bankFilters.module || "全部"} / 子类=${bankFilters.subtype || "全部"} / 题型=${bankFilters.item_format || "全部"}`}
-                    actionLabel="清空筛选"
-                    onAction={resetBankFilters}
-                  />
-                ) : (
-                  <div className="table-shell">
-                    <table className="data-table">
-                      <thead>
-                        <tr>
-                          <th>Question</th>
-                          <th>Module</th>
-                          <th>Subtype</th>
-                          <th>题面预览</th>
-                          <th>Format</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {bankRows.map((item) => (
-                          <tr
-                            key={item.question_id}
-                            className={selectedBankItem?.question_id === item.question_id ? "row-active" : ""}
-                            onClick={() => setSelectedBankQuestionId(item.question_id)}
-                          >
-                            <td className="mono">{item.question_id}</td>
-                            <td>{item.module}</td>
-                            <td>{item.subtype || "-"}</td>
-                            <td>{briefText(item.prompt_template || item.turn_script?.[0]?.content_template)}</td>
-                            <td>{item.item_format}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-              <DetailCard title="正式题详情" item={selectedBankItem} timelineData={null} />
-            </div>
-          </section>
+          <BankPage
+            apiFetch={apiFetch}
+            systemPaths={systemPaths}
+            onToast={(tone, title, body) => {
+              if (tone === "error") setError(body || title);
+              else setNotice(body || title);
+            }}
+          />
         ) : null}
 
 {view === "models" ? (
@@ -2610,121 +2529,151 @@ function App() {
               </div>
             </div>
 
-            <div className="history-layout">
-              <div className="detail-card history-table-card">
-                <SectionTitle title="运行中心" meta="支持多选删除、报告预览和路径复制" />
-                <div className="table-shell history-table-shell">
-                  <table className="data-table history-table">
-                    <thead>
-                      <tr>
-                        <th className="check-col">
+            <div className="detail-card history-table-card">
+              <SectionTitle title="运行中心" meta="支持多选删除、报告预览和路径复制" />
+              <div className="table-shell history-table-shell">
+                <table className="data-table history-table">
+                  <thead>
+                    <tr>
+                      <th className="check-col">
+                        <input
+                          type="checkbox"
+                          checked={runs.length > 0 && selectedHistoryRunIds.length === runs.length}
+                          onChange={toggleAllHistoryRuns}
+                          aria-label="全选 runs"
+                        />
+                      </th>
+                      <th style={{ width: "12rem" }}>Run ID</th>
+                      <th style={{ width: "4rem" }}>Kind</th>
+                      <th style={{ width: "9rem" }}>Provider</th>
+                      <th style={{ width: "9rem" }}>Model</th>
+                      <th style={{ width: "6rem" }}>Status</th>
+                      <th style={{ width: "7rem" }}>Processed / Total</th>
+                      <th style={{ width: "7rem" }}>Succeeded / Failed</th>
+                      <th style={{ width: "5rem" }}>Report</th>
+                      <th style={{ width: "6rem" }}>Canonical</th>
+                      <th style={{ width: "5rem" }}>路径</th>
+                      <th style={{ width: "8rem" }}>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {runs.map((run) => (
+                      <tr
+                        key={run.run_id}
+                        className={selectedRunId === run.run_id ? "row-active" : ""}
+                        onClick={() => {
+                          setSelectedRunId(run.run_id);
+                          setSelectedQuestionId(null);
+                          setHistoryDetailOpen(true);
+                          refreshRun(run.run_id);
+                        }}
+                      >
+                        <td className="check-col" onClick={(event) => event.stopPropagation()}>
                           <input
                             type="checkbox"
-                            checked={runs.length > 0 && selectedHistoryRunIds.length === runs.length}
-                            onChange={toggleAllHistoryRuns}
-                            aria-label="全选 runs"
+                            checked={historySelection.has(run.run_id)}
+                            onChange={() => toggleHistoryRunSelection(run.run_id)}
+                            aria-label={`选择 ${run.run_id}`}
                           />
-                        </th>
-                        <th>Run ID</th>
-                        <th>Kind</th>
-                        <th>Provider</th>
-                        <th>Model</th>
-                        <th>Status</th>
-                        <th>Processed / Total</th>
-                        <th>Succeeded / Failed</th>
-                        <th>Report</th>
-                        <th>Canonical</th>
-                        <th>路径</th>
-                        <th>操作</th>
+                        </td>
+                        <td className="mono data-cell-wrap">{run.run_id}</td>
+                        <td className="data-cell-wrap">{run.run_kind || "base"}</td>
+                        <td className="data-cell-wrap">{run.provider_id || "-"}</td>
+                        <td className="data-cell-wrap">{run.model_alias || run.model_name || "-"}</td>
+                        <td className="data-cell-wrap">{run.execution_status || run.status || "-"}</td>
+                        <td>{getRunCounts(run).processed} / {getRunCounts(run).total}</td>
+                        <td>{getRunCounts(run).succeeded} / {getRunCounts(run).failed}</td>
+                        <td><RunArtifactStatus ready={run.report_ready} label="报告" /></td>
+                        <td><RunArtifactStatus ready={run.canonical_ready} label="Canonical" /></td>
+                        <td><CopyButton value={run.run_dir} label="复制目录" /></td>
+                        <td>
+                          <div className="history-row-actions" onClick={(event) => event.stopPropagation()}>
+                            <button
+                              className="mini-button"
+                              type="button"
+                              onClick={() => handlePreviewReport(run.run_id, { generateIfMissing: !run.report_ready })}
+                            >
+                              预览
+                            </button>
+                            <button className="mini-button danger" type="button" onClick={() => deleteRun(run)}>
+                              删除
+                            </button>
+                          </div>
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {runs.map((run) => (
-                        <tr
-                          key={run.run_id}
-                          className={selectedRunId === run.run_id ? "row-active" : ""}
-                          onClick={() => {
-                            setSelectedRunId(run.run_id);
-                            setSelectedQuestionId(null);
-                            refreshRun(run.run_id);
-                          }}
-                        >
-                          <td className="check-col" onClick={(event) => event.stopPropagation()}>
-                            <input
-                              type="checkbox"
-                              checked={historySelection.has(run.run_id)}
-                              onChange={() => toggleHistoryRunSelection(run.run_id)}
-                              aria-label={`选择 ${run.run_id}`}
-                            />
-                          </td>
-                          <td className="mono data-cell-wrap">{run.run_id}</td>
-                          <td className="data-cell-wrap">{run.run_kind || "base"}</td>
-                          <td className="data-cell-wrap">{run.provider_id || "-"}</td>
-                          <td className="data-cell-wrap">{run.model_alias || run.model_name || "-"}</td>
-                          <td className="data-cell-wrap">{run.execution_status || run.status || "-"}</td>
-                          <td>{getRunCounts(run).processed} / {getRunCounts(run).total}</td>
-                          <td>{getRunCounts(run).succeeded} / {getRunCounts(run).failed}</td>
-                          <td><RunArtifactStatus ready={run.report_ready} label="报告" /></td>
-                          <td><RunArtifactStatus ready={run.canonical_ready} label="Canonical" /></td>
-                          <td><CopyButton value={run.run_dir} label="复制目录" /></td>
-                          <td>
-                            <div className="history-row-actions" onClick={(event) => event.stopPropagation()}>
-                              <button
-                                className="mini-button"
-                                type="button"
-                                onClick={() => handlePreviewReport(run.run_id, { generateIfMissing: !run.report_ready })}
-                              >
-                                预览
-                              </button>
-                              <button className="mini-button danger" type="button" onClick={() => deleteRun(run)}>
-                                删除
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-
-              {selectedRun ? (
-                <div className="detail-card history-detail-card">
-                  <SectionTitle title={`Run 详情: ${selectedRun.run_id}`} meta={`${selectedRun.run_kind || "base"} / ${selectedRun.execution_status || selectedRun.status || "-"}`} />
-                  <div className="compact-meta-panel">
-                    <div className="compact-meta-line"><span>Provider</span><strong>{selectedRun.provider_id || "-"}</strong></div>
-                    <div className="compact-meta-line"><span>Model</span><strong>{selectedRun.model_alias || selectedRun.model_name || "-"}</strong></div>
-                    <div className="compact-meta-line"><span>Processed</span><strong>{selectedRunCounts.processed} / {selectedRunCounts.total}</strong></div>
-                    <div className="compact-meta-line"><span>Succeeded</span><strong>{selectedRunCounts.succeeded}</strong></div>
-                    <div className="compact-meta-line"><span>Failed</span><strong>{selectedRunCounts.failed}</strong></div>
-                    <div className="compact-meta-line"><span>Inflight</span><strong>{selectedRunCounts.inflight}</strong></div>
-                  </div>
-                  <div className="history-toolbar history-toolbar-compact">
-                    <div className="history-toolbar-group">
-                      <button
-                        className="mini-button"
-                        type="button"
-                        onClick={() => handlePreviewReport(selectedRun.run_id, { generateIfMissing: !selectedRun.report_ready })}
-                      >
-                        打开报告预览
-                      </button>
-                      <CopyButton value={selectedRun.run_dir} label="复制目录" />
-                    </div>
-                  </div>
-                  <PathList
-                    title="文件路径"
-                    paths={{
-                      run_dir: selectedRun.run_dir,
-                      evaluation_run_path: selectedRun.evaluation_run_path,
-                      item_scores_path: selectedRun.item_scores_path,
-                      summary_path: selectedRun.summary_path,
-                      canonical_summary_path: selectedRun.canonical_summary_path,
-                      report_path: selectedRun.report_path,
-                    }}
-                  />
-                </div>
-              ) : null}
             </div>
+
+            {historyDetailOpen && selectedRun
+              ? createPortal(
+                  <div
+                    className="modal-backdrop"
+                    onClick={() => setHistoryDetailOpen(false)}
+                    role="presentation"
+                  >
+                    <div
+                      className="modal-card modal-card-lg"
+                      onClick={(event) => event.stopPropagation()}
+                      role="dialog"
+                      aria-modal="true"
+                    >
+                      <div className="modal-header">
+                        <div>
+                          <div className="modal-title">Run 详情: {selectedRun.run_id}</div>
+                          <div className="modal-subtitle">
+                            {selectedRun.run_kind || "base"} / {selectedRun.execution_status || selectedRun.status || "-"}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          className="modal-close"
+                          onClick={() => setHistoryDetailOpen(false)}
+                          aria-label="关闭"
+                        >
+                          ×
+                        </button>
+                      </div>
+                      <div className="modal-body">
+                        <div className="compact-meta-panel">
+                          <div className="compact-meta-line"><span>Provider</span><strong>{selectedRun.provider_id || "-"}</strong></div>
+                          <div className="compact-meta-line"><span>Model</span><strong>{selectedRun.model_alias || selectedRun.model_name || "-"}</strong></div>
+                          <div className="compact-meta-line"><span>Processed</span><strong>{selectedRunCounts.processed} / {selectedRunCounts.total}</strong></div>
+                          <div className="compact-meta-line"><span>Succeeded</span><strong>{selectedRunCounts.succeeded}</strong></div>
+                          <div className="compact-meta-line"><span>Failed</span><strong>{selectedRunCounts.failed}</strong></div>
+                          <div className="compact-meta-line"><span>Inflight</span><strong>{selectedRunCounts.inflight}</strong></div>
+                        </div>
+                        <div className="history-toolbar history-toolbar-compact">
+                          <div className="history-toolbar-group">
+                            <button
+                              className="mini-button"
+                              type="button"
+                              onClick={() => handlePreviewReport(selectedRun.run_id, { generateIfMissing: !selectedRun.report_ready })}
+                            >
+                              打开报告预览
+                            </button>
+                            <CopyButton value={selectedRun.run_dir} label="复制目录" />
+                          </div>
+                        </div>
+                        <PathList
+                          title="文件路径"
+                          paths={{
+                            run_dir: selectedRun.run_dir,
+                            evaluation_run_path: selectedRun.evaluation_run_path,
+                            item_scores_path: selectedRun.item_scores_path,
+                            summary_path: selectedRun.summary_path,
+                            canonical_summary_path: selectedRun.canonical_summary_path,
+                            report_path: selectedRun.report_path,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>,
+                  document.body,
+                )
+              : null}
           </section>
         ) : null}
 

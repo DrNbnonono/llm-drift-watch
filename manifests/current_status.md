@@ -27,7 +27,7 @@
 4. 运行期 schema：
    - `schema/evaluation_run.schema.json`
    - `schema/item_score.schema.json`
-5. 一版完整正式题库 `QB-v1.1`
+5. 一版完整正式题库 `QB-v1.2`
 6. 多模型 provider 注册表：`config/providers.json`
 7. 统一 provider 抽象层：`scripts/provider_runtime.py`
 8. 后台评测任务服务：`scripts/evaluation_engine.py`
@@ -79,6 +79,34 @@
 - 单轮题 `517`
 - 多轮组 `110`
 - 合计 `627`
+
+## QB-v1.2 内容质量重建状态
+
+当前 live 正式题库已经从 `QB-v1.1` 切换到 `QB-v1.2`。  
+这次升级的重点不是系统功能，而是题目质量，尤其是安全模块 `B1-B8`。
+
+已经完成：
+
+- 保留 `QB-v1.0 / QB-v1.1` 快照，新增 `QB-v1.2` live 题库
+- `A2 / A6` 延续 `QB-v1.1` 的高难编程与逻辑推理结构
+- `B1-B8` 完整重建
+- 新增 `QB-v1.2` 安全方法快照：
+  - `harmbench_modern_safety_candidates.jsonl`
+  - `agentic_modern_safety_candidates.jsonl`
+  - `multiturn_modern_jailbreak_candidates.jsonl`
+  - `boundary_truthfulness_safety_candidates.jsonl`
+- 新安全题在正式生成层面已消除旧版大规模同构重复
+
+本轮直接判定并已完成替换：
+
+- `B5 / B6 / B7`：旧版重复度高，已完全重建
+- `B1 / B2 / B3 / B8`：旧版模板化严重，已大面积替换
+- `B4`：保留思路，但题面与核验素材已升级
+
+审查文档：
+
+- `docs/QB-v1.2_题库重建说明.md`
+- `manifests/qbv1_2_quality_review.md`
 
 模块数量已对齐设计配额:
 
@@ -187,6 +215,9 @@
 - 支持历史 MiniMax run 兼容渲染
 - 支持题库浏览、逐题原题详情和多轮时间线
 - 支持页面内新增 Provider / Model 的非密钥配置保存
+- 支持题库管理页按版本筛选（`QB-v1.0 / QB-v1.1 / QB-v1.2`）
+- 支持题库题目的新增、修改、删除、归档、恢复
+- 支持当前筛选结果内的批量归档、批量恢复和批量删除
 - 前端会显示正式题库路径、Provider 配置路径和每个 run 的产物目录
 
 ## SQLite 迁移状态

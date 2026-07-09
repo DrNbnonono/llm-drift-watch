@@ -46,6 +46,12 @@ class BulkDeleteRunsRequest(BaseModel):
     run_ids: list[str] = Field(default_factory=list)
 
 
+class BankBulkActionRequest(BaseModel):
+    question_ids: list[str] = Field(default_factory=list)
+    action: str
+    qa_status: str = "ready"
+
+
 class ProviderUpsertRequest(BaseModel):
     provider_id: str | None = None
     display_name: str
@@ -349,17 +355,23 @@ def get_item_timeline(run_id: str, question_id: str, canonical_only: bool = Quer
 
 @app.get("/api/bank/items")
 def list_bank_items(
+    version: str | None = Query(default=None),
     module: str | None = Query(default=None),
     subtype: str | None = Query(default=None),
     item_format: str | None = Query(default=None),
+    qa_status: str | None = Query(default=None),
+    include_archived: bool = Query(default=True),
     keyword: str | None = Query(default=None),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
 ) -> dict[str, Any]:
     return service.list_bank_items(
+        version=version,
         module=module,
         subtype=subtype,
         item_format=item_format,
+        qa_status=qa_status,
+        include_archived=include_archived,
         keyword=keyword,
         offset=offset,
         limit=limit,
@@ -377,6 +389,62 @@ def get_bank_item(question_id: str) -> dict[str, Any]:
     if not item:
         raise HTTPException(status_code=404, detail="question not found")
     return item
+
+
+@app.post("/api/bank/items")
+def create_bank_item(payload: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return service.create_bank_item(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.put("/api/bank/items/{question_id}")
+def update_bank_item(question_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return service.update_bank_item(question_id, payload)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="question not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.delete("/api/bank/items/{question_id}")
+def delete_bank_item(question_id: str) -> dict[str, Any]:
+    deleted = service.delete_bank_item(question_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="question not found")
+    return {"deleted": True, "question_id": question_id}
+
+
+@app.post("/api/bank/items/{question_id}/archive")
+def archive_bank_item(question_id: str) -> dict[str, Any]:
+    item = service.archive_bank_item(question_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="question not found")
+    return item
+
+
+@app.post("/api/bank/items/{question_id}/restore")
+def restore_bank_item(
+    question_id: str, qa_status: str = Query(default="ready")
+) -> dict[str, Any]:
+    item = service.restore_bank_item(question_id, qa_status=qa_status)
+    if not item:
+        raise HTTPException(status_code=404, detail="question not found")
+    return item
+
+
+@app.post("/api/bank/items/bulk-action")
+def bulk_bank_action(payload: BankBulkActionRequest) -> dict[str, Any]:
+    try:
+        return service.bulk_bank_action(
+            payload.question_ids,
+            action=payload.action,
+            qa_status=payload.qa_status,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/api/runs/{run_id}/report")

@@ -57,12 +57,33 @@ class SQLiteStore:
         self.bootstrap_legacy()
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path, check_same_thread=False)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA synchronous=NORMAL")
-        conn.execute("PRAGMA foreign_keys=ON")
-        return conn
+        def _open() -> sqlite3.Connection:
+            conn = sqlite3.connect(self.db_path, check_same_thread=False)
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA foreign_keys=ON")
+            return conn
+
+        conn = _open()
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")
+            return conn
+        except sqlite3.OperationalError as exc:
+            if "disk I/O error" not in str(exc):
+                conn.close()
+                raise
+            conn.close()
+            for suffix in ("-shm", "-wal"):
+                sidecar = Path(f"{self.db_path}{suffix}")
+                if sidecar.exists():
+                    try:
+                        sidecar.unlink()
+                    except OSError:
+                        pass
+            conn = _open()
+            conn.execute("PRAGMA journal_mode=DELETE")
+            conn.execute("PRAGMA synchronous=NORMAL")
+            return conn
 
     def _init_schema(self) -> None:
         with self._connect() as conn:
@@ -123,6 +144,7 @@ class SQLiteStore:
 
                 CREATE TABLE IF NOT EXISTS bank_items (
                     question_id TEXT PRIMARY KEY,
+                    version TEXT,
                     module TEXT NOT NULL,
                     subtype TEXT,
                     item_format TEXT NOT NULL,
@@ -204,6 +226,20 @@ class SQLiteStore:
             self._ensure_column(conn, "runs", "connection_id", "TEXT")
             self._ensure_column(conn, "runs", "connection_name", "TEXT")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_runs_connection_id ON runs(connection_id)")
+            self._ensure_column(conn, "bank_items", "version", "TEXT")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_items_version ON bank_items(version)")
+            self._ensure_column(conn, "bank_items", "qa_status", "TEXT NOT NULL DEFAULT 'ready'")
+            conn.execute("UPDATE bank_items SET qa_status = 'ready' WHERE qa_status IS NULL OR qa_status = ''")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_items_qa_status ON bank_items(qa_status)")
+            rows = conn.execute(
+                "SELECT question_id, full_item_json FROM bank_items WHERE version IS NULL OR version = ''"
+            ).fetchall()
+            for row in rows:
+                item = json_loads(row["full_item_json"], {})
+                conn.execute(
+                    "UPDATE bank_items SET version = ? WHERE question_id = ?",
+                    (item.get("version") or "", row["question_id"]),
+                )
 
     def _ensure_column(self, conn: sqlite3.Connection, table: str, column: str, sql_type: str) -> None:
         rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
@@ -509,15 +545,21 @@ class SQLiteStore:
     def list_bank_items(
         self,
         *,
+        version: str | None = None,
         module: str | None = None,
         subtype: str | None = None,
         item_format: str | None = None,
+        qa_status: str | None = None,
+        include_archived: bool = True,
         keyword: str | None = None,
         offset: int = 0,
         limit: int = 50,
     ) -> dict[str, Any]:
         clauses: list[str] = []
         params: list[Any] = []
+        if version:
+            clauses.append("version = ?")
+            params.append(version)
         if module:
             clauses.append("module = ?")
             params.append(module)
@@ -527,6 +569,11 @@ class SQLiteStore:
         if item_format:
             clauses.append("item_format = ?")
             params.append(item_format)
+        if qa_status:
+            clauses.append("qa_status = ?")
+            params.append(qa_status)
+        elif not include_archived:
+            clauses.append("qa_status != 'retired'")
         if keyword:
             clauses.append("search_text LIKE ?")
             params.append(f"%{keyword.lower()}%")
@@ -549,14 +596,86 @@ class SQLiteStore:
             "limit": limit,
         }
 
+    def create_bank_item(self, row: dict[str, Any]) -> dict[str, Any]:
+        with self._connect() as conn:
+            existing = conn.execute(
+                "SELECT question_id FROM bank_items WHERE question_id = ?",
+                (row["question_id"],),
+            ).fetchone()
+            if existing:
+                raise ValueError(f"question_id already exists: {row['question_id']}")
+            self._insert_bank_item(conn, row)
+        return row
+
+    def update_bank_item(self, question_id: str, row: dict[str, Any]) -> dict[str, Any]:
+        row["question_id"] = question_id
+        with self._connect() as conn:
+            existing = conn.execute(
+                "SELECT question_id FROM bank_items WHERE question_id = ?",
+                (question_id,),
+            ).fetchone()
+            if not existing:
+                raise KeyError(question_id)
+            self._insert_bank_item(conn, row)
+        return row
+
+    def delete_bank_item(self, question_id: str) -> bool:
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "DELETE FROM bank_items WHERE question_id = ?",
+                (question_id,),
+            )
+        return cursor.rowcount > 0
+
+    def archive_bank_item(self, question_id: str) -> dict[str, Any] | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT full_item_json FROM bank_items WHERE question_id = ?",
+                (question_id,),
+            ).fetchone()
+            if not row:
+                return None
+            item = json_loads(row["full_item_json"], {})
+            item["qa_status"] = "retired"
+            self._insert_bank_item(conn, item)
+        return item
+
+    def restore_bank_item(
+        self, question_id: str, qa_status: str = "ready"
+    ) -> dict[str, Any] | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT full_item_json FROM bank_items WHERE question_id = ?",
+                (question_id,),
+            ).fetchone()
+            if not row:
+                return None
+            item = json_loads(row["full_item_json"], {})
+            item["qa_status"] = qa_status
+            self._insert_bank_item(conn, item)
+        return item
+
+    def get_all_bank_items(self) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT full_item_json FROM bank_items ORDER BY question_id"
+            ).fetchall()
+        return [json_loads(row["full_item_json"], {}) for row in rows]
+
     def get_bank_facets(self) -> dict[str, Any]:
         with self._connect() as conn:
             total_row = conn.execute("SELECT COUNT(*) AS n FROM bank_items").fetchone()
+            versions = conn.execute(
+                "SELECT version AS value, COUNT(*) AS count FROM bank_items GROUP BY version ORDER BY version"
+            ).fetchall()
             modules = conn.execute(
                 "SELECT module AS value, COUNT(*) AS count FROM bank_items GROUP BY module ORDER BY module"
             ).fetchall()
             item_formats = conn.execute(
                 "SELECT item_format AS value, COUNT(*) AS count FROM bank_items GROUP BY item_format ORDER BY item_format"
+            ).fetchall()
+            qa_statuses = conn.execute(
+                "SELECT qa_status AS value, COUNT(*) AS count FROM bank_items GROUP BY qa_status ORDER BY qa_status"
             ).fetchall()
             subtypes = conn.execute(
                 """
@@ -574,7 +693,11 @@ class SQLiteStore:
             entry["modules"].append(row["module"])
         return {
             "total": int(total_row["n"]),
+            "versions": [{"value": row["value"], "count": int(row["count"])} for row in versions],
             "modules": [{"value": row["value"], "count": int(row["count"])} for row in modules],
+            "qa_statuses": [
+                {"value": row["value"], "count": int(row["count"])} for row in qa_statuses
+            ],
             "subtypes": sorted(
                 [
                     {"value": meta["value"], "count": meta["count"], "modules": sorted(meta["modules"])}
@@ -713,11 +836,12 @@ class SQLiteStore:
         conn.execute(
             """
             INSERT INTO bank_items (
-                question_id, module, subtype, item_format, prompt_template,
+                question_id, version, module, subtype, item_format, prompt_template,
                 turn_script_json, ground_truth_json, scoring_method, scoring_params_json,
-                rotation_policy_json, provenance_json, search_text, full_item_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                rotation_policy_json, provenance_json, qa_status, search_text, full_item_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(question_id) DO UPDATE SET
+                version=excluded.version,
                 module=excluded.module,
                 subtype=excluded.subtype,
                 item_format=excluded.item_format,
@@ -728,12 +852,14 @@ class SQLiteStore:
                 scoring_params_json=excluded.scoring_params_json,
                 rotation_policy_json=excluded.rotation_policy_json,
                 provenance_json=excluded.provenance_json,
+                qa_status=excluded.qa_status,
                 search_text=excluded.search_text,
                 full_item_json=excluded.full_item_json,
                 updated_at=CURRENT_TIMESTAMP
             """,
             (
                 row["question_id"],
+                row.get("version"),
                 row["module"],
                 row.get("subtype"),
                 row["item_format"],
@@ -744,6 +870,7 @@ class SQLiteStore:
                 json_dumps(row.get("scoring_params", {})),
                 json_dumps(row.get("rotation_policy", {})),
                 json_dumps(row.get("provenance", {})),
+                row.get("qa_status") or "ready",
                 search_text,
                 json_dumps(row),
             ),
