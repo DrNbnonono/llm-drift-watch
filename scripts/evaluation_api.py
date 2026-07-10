@@ -36,6 +36,8 @@ class RunCreateRequest(BaseModel):
     limit_per_module: int = 1
     concurrency_limit: int = Field(default=1, ge=1, le=4)
     question_ids: list[str] | None = None
+    bank_version: str | None = None
+    judge_connection_id: str | None = None
 
 
 class RetryRequest(BaseModel):
@@ -47,10 +49,42 @@ class BulkDeleteRunsRequest(BaseModel):
     run_ids: list[str] = Field(default_factory=list)
 
 
+class JudgeRetryRequest(BaseModel):
+    attempt_run_id: str | None = None
+    judge_connection_id: str | None = None
+
+
+class ManualReviewRequest(BaseModel):
+    attempt_run_id: str | None = None
+    reviewer: str
+    score: float = Field(ge=0, le=1)
+    verdict: str | None = None
+    note: str = ""
+    confirmed: bool = True
+    needs_review: bool = False
+
+
+class ReviewThreadCreateRequest(BaseModel):
+    attempt_run_id: str | None = None
+    connection_id: str | None = None
+    title: str | None = None
+
+
+class ReviewMessageRequest(BaseModel):
+    content: str
+    connection_id: str | None = None
+
+
+class ReviewSettingsRequest(BaseModel):
+    default_judge_connection_id: str | None = None
+    reviewer_name: str | None = None
+
+
 class BankBulkActionRequest(BaseModel):
     question_ids: list[str] = Field(default_factory=list)
     action: str
     qa_status: str = "ready"
+    version: str | None = None
 
 
 class ProviderUpsertRequest(BaseModel):
@@ -284,6 +318,8 @@ def create_run(payload: RunCreateRequest) -> dict[str, Any]:
             limit_per_module=payload.limit_per_module,
             concurrency_limit=payload.concurrency_limit,
             question_ids=payload.question_ids,
+            bank_version=payload.bank_version,
+            judge_connection_id=payload.judge_connection_id,
         )
         return run
     except Exception as exc:  # noqa: BLE001
@@ -408,6 +444,78 @@ def get_item_timeline(run_id: str, question_id: str, canonical_only: bool = Quer
         raise HTTPException(status_code=404, detail="question or run not found") from exc
 
 
+@app.post("/api/runs/{run_id}/items/{question_id}/judge")
+def retry_judge(run_id: str, question_id: str, payload: JudgeRetryRequest) -> dict[str, Any]:
+    try:
+        return service.judge_run_item(run_id, question_id, attempt_run_id=payload.attempt_run_id, judge_connection_id=payload.judge_connection_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="question or run not found") from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/runs/{run_id}/items/{question_id}/manual-review")
+def submit_manual_review(run_id: str, question_id: str, payload: ManualReviewRequest) -> dict[str, Any]:
+    try:
+        return service.submit_manual_review(run_id, question_id, payload.model_dump())
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="question or run not found") from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/runs/{run_id}/items/{question_id}/reviews")
+def review_history(run_id: str, question_id: str, attempt_run_id: str | None = Query(default=None)) -> dict[str, Any]:
+    return service.get_review_history(run_id, question_id, attempt_run_id)
+
+
+@app.get("/api/reviews/queue")
+def review_queue(run_id: str | None = Query(default=None)) -> dict[str, Any]:
+    rows = service.get_review_queue(run_id)
+    return {"items": rows, "total": len(rows)}
+
+
+@app.get("/api/review-settings")
+def review_settings() -> dict[str, Any]:
+    return service.get_review_settings()
+
+
+@app.put("/api/review-settings")
+def update_review_settings(payload: ReviewSettingsRequest) -> dict[str, Any]:
+    try:
+        return service.update_review_settings(payload.model_dump(exclude_unset=True))
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/runs/{run_id}/items/{question_id}/review-threads")
+def create_review_thread(run_id: str, question_id: str, payload: ReviewThreadCreateRequest) -> dict[str, Any]:
+    try:
+        return service.create_review_thread(run_id, question_id, payload.model_dump())
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="question or run not found") from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/review-threads/{thread_id}")
+def get_review_thread(thread_id: str) -> dict[str, Any]:
+    try:
+        return service.get_review_thread(thread_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="review thread not found") from exc
+
+
+@app.post("/api/review-threads/{thread_id}/messages")
+def send_review_message(thread_id: str, payload: ReviewMessageRequest) -> dict[str, Any]:
+    try:
+        return service.send_review_message(thread_id, payload.content, payload.connection_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="review thread not found") from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @app.get("/api/bank/items")
 def list_bank_items(
     version: str | None = Query(default=None),
@@ -433,14 +541,22 @@ def list_bank_items(
     )
 
 
+@app.get("/api/bank/versions")
+def list_bank_versions() -> dict[str, Any]:
+    return {"versions": service.list_bank_versions()}
+
+
 @app.get("/api/bank/facets")
-def bank_facets() -> dict[str, Any]:
-    return service.get_bank_facets()
+def bank_facets(
+    version: str | None = Query(default=None),
+    module: str | None = Query(default=None),
+) -> dict[str, Any]:
+    return service.get_bank_facets(version=version, module=module)
 
 
 @app.get("/api/bank/items/{question_id}")
-def get_bank_item(question_id: str) -> dict[str, Any]:
-    item = service.get_bank_item(question_id)
+def get_bank_item(question_id: str, version: str | None = Query(default=None)) -> dict[str, Any]:
+    item = service.get_bank_item(question_id, version=version)
     if not item:
         raise HTTPException(status_code=404, detail="question not found")
     return item
@@ -455,9 +571,9 @@ def create_bank_item(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 @app.put("/api/bank/items/{question_id}")
-def update_bank_item(question_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+def update_bank_item(question_id: str, payload: dict[str, Any], version: str | None = Query(default=None)) -> dict[str, Any]:
     try:
-        return service.update_bank_item(question_id, payload)
+        return service.update_bank_item(question_id, payload, version=version)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="question not found") from exc
     except ValueError as exc:
@@ -465,16 +581,22 @@ def update_bank_item(question_id: str, payload: dict[str, Any]) -> dict[str, Any
 
 
 @app.delete("/api/bank/items/{question_id}")
-def delete_bank_item(question_id: str) -> dict[str, Any]:
-    deleted = service.delete_bank_item(question_id)
+def delete_bank_item(question_id: str, version: str | None = Query(default=None)) -> dict[str, Any]:
+    try:
+        deleted = service.delete_bank_item(question_id, version=version)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not deleted:
         raise HTTPException(status_code=404, detail="question not found")
     return {"deleted": True, "question_id": question_id}
 
 
 @app.post("/api/bank/items/{question_id}/archive")
-def archive_bank_item(question_id: str) -> dict[str, Any]:
-    item = service.archive_bank_item(question_id)
+def archive_bank_item(question_id: str, version: str | None = Query(default=None)) -> dict[str, Any]:
+    try:
+        item = service.archive_bank_item(question_id, version=version)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not item:
         raise HTTPException(status_code=404, detail="question not found")
     return item
@@ -482,9 +604,12 @@ def archive_bank_item(question_id: str) -> dict[str, Any]:
 
 @app.post("/api/bank/items/{question_id}/restore")
 def restore_bank_item(
-    question_id: str, qa_status: str = Query(default="ready")
+    question_id: str, qa_status: str = Query(default="ready"), version: str | None = Query(default=None)
 ) -> dict[str, Any]:
-    item = service.restore_bank_item(question_id, qa_status=qa_status)
+    try:
+        item = service.restore_bank_item(question_id, qa_status=qa_status, version=version)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not item:
         raise HTTPException(status_code=404, detail="question not found")
     return item
@@ -497,6 +622,7 @@ def bulk_bank_action(payload: BankBulkActionRequest) -> dict[str, Any]:
             payload.question_ids,
             action=payload.action,
             qa_status=payload.qa_status,
+            version=payload.version,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

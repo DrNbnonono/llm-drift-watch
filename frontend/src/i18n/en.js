@@ -13,6 +13,7 @@ export default {
     models: "Models",
     history: "History",
     reports: "Reports",
+    review: "Manual Review",
     settings: "Settings",
   },
   common: {

@@ -21,6 +21,7 @@ const RUN_VIEW_KEYS = [
   { key: "models" },
   { key: "history" },
   { key: "reports" },
+  { key: "review" },
   { key: "settings" },
 ];
 
@@ -745,6 +746,8 @@ function App() {
   const [providers, setProviders] = useState([]);
   const [models, setModels] = useState([]);
   const [connections, setConnections] = useState([]);
+  const [bankVersions, setBankVersions] = useState([]);
+  const [reviewQueue, setReviewQueue] = useState([]);
   const [runs, setRuns] = useState([]);
   const [selectedRunId, setSelectedRunId] = useState(null);
   const [selectedRun, setSelectedRun] = useState(null);
@@ -791,6 +794,8 @@ function App() {
     timeout: 45,
     concurrency_limit: 1,
     max_items: "",
+    bank_version: "QB-v1.3",
+    judge_connection_id: "",
   });
 
   const [itemFilters, setItemFilters] = useState({
@@ -854,6 +859,7 @@ function App() {
 
   useEffect(() => {
     refreshProviders();
+    refreshBankVersions();
     refreshRuns();
     loadSystemPaths();
     loadBankFacets();
@@ -1067,6 +1073,13 @@ function App() {
     }
   }, [view, report, loadingReport, selectedRun, reportCandidates]);
 
+  useEffect(() => {
+    if (view !== "review") return;
+    apiFetch("/api/reviews/queue")
+      .then((data) => setReviewQueue(data.items || []))
+      .catch((err) => setError(humanizeError(err?.message || err)));
+  }, [view]);
+
   async function refreshProviders() {
     setLoadingProviders(true);
     try {
@@ -1099,6 +1112,24 @@ function App() {
       setError(humanizeError(err?.message || err));
     } finally {
       setLoadingProviders(false);
+    }
+  }
+
+  async function refreshBankVersions() {
+    try {
+      const data = await apiFetch("/api/bank/versions");
+      const versions = (data.versions || []).filter((item) => item.is_runnable !== false);
+      setBankVersions(versions);
+      if (versions.length) {
+        setRunForm((prev) => ({
+          ...prev,
+          bank_version: versions.some((item) => item.version === prev.bank_version)
+            ? prev.bank_version
+            : (versions.find((item) => item.status === "current")?.version || versions[versions.length - 1].version),
+        }));
+      }
+    } catch (err) {
+      setError(humanizeError(err?.message || err));
     }
   }
 
@@ -1244,6 +1275,8 @@ function App() {
         timeout: Number(runForm.timeout || connection?.default_timeout) || null,
         concurrency_limit: Number(runForm.concurrency_limit) || 1,
         max_items: runForm.max_items ? Number(runForm.max_items) : null,
+        bank_version: runForm.bank_version,
+        judge_connection_id: runForm.judge_connection_id || null,
       };
       const run = await apiFetch("/api/runs", {
         method: "POST",
@@ -1829,6 +1862,7 @@ function App() {
     briefText,
     formatValue,
     setView,
+    apiFetch,
   };
   const reportPageHelpers = {
     SectionTitle,
@@ -1966,6 +2000,27 @@ function App() {
               <label>
                 Timeout
                 <input type="number" value={runForm.timeout} onChange={(event) => setRunForm((prev) => ({ ...prev, timeout: event.target.value }))} />
+              </label>
+              <label>
+                题库版本（必选）
+                <select value={runForm.bank_version} required onChange={(event) => setRunForm((prev) => ({ ...prev, bank_version: event.target.value }))}>
+                  {bankVersions.map((version) => (
+                    <option key={version.version} value={version.version}>
+                      {version.display_name || version.version} · {version.item_count} 题
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                独立裁判模型（可选）
+                <select value={runForm.judge_connection_id} onChange={(event) => setRunForm((prev) => ({ ...prev, judge_connection_id: event.target.value }))}>
+                  <option value="">未配置时进入人工待评分</option>
+                  {connections.filter((connection) => connection.model_alias !== selectedConnection?.model_alias).map((connection) => (
+                    <option key={connection.connection_id} value={connection.connection_id}>
+                      {connection.display_name} / {connection.model_name}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label>
                 并发上限
@@ -2742,6 +2797,17 @@ function App() {
             systemPaths={systemPaths}
             onCopied={(message) => setNotice(message)}
           />
+        ) : null}
+
+        {view === "review" ? (
+          <section className="panel">
+            <SectionTitle title="人工复核队列" meta={`待处理 ${reviewQueue.length}`} />
+            {!reviewQueue.length ? <EmptyState title="当前没有待复核题目" description="裁判失败、低置信度或评分分歧较大的题目会出现在这里。" /> : (
+              <div className="table-shell"><table className="data-table"><thead><tr><th>Run</th><th>版本 / 题号</th><th>模块</th><th>回答预览</th><th>规则 / 裁判</th><th>原因</th><th /></tr></thead><tbody>
+                {reviewQueue.map((item) => <tr key={`${item.run_id}-${item.question_id}-${item.attempt_run_id}`}><td className="mono">{item.run_id}</td><td>{item.bank_version}<br /><span className="mono">{item.question_id}</span></td><td>{item.module}</td><td>{briefText(item.response?.text, 100)}</td><td>{formatValue(item.rule_score)} / {formatValue(item.judge_score)}</td><td>{(item.review_reasons || []).join("、")}</td><td><button className="mini-button" type="button" onClick={() => { setSelectedRunId(item.run_id); setSelectedQuestionId(item.question_id); setView("items"); }}>打开复核</button></td></tr>)}
+              </tbody></table></div>
+            )}
+          </section>
         ) : null}
 
         {view === "taxonomy" ? (

@@ -67,6 +67,8 @@ export default function SystemSettings({ apiFetch, systemPaths, onCopied }) {
   const [info, setInfo] = useState("");
   const [theme, setTheme] = useState(() => loadInitial("qb_theme", "slate"));
   const [density, setDensity] = useState(() => loadInitial("qb_density", "cozy"));
+  const [reviewSettings, setReviewSettings] = useState({ default_judge_connection_id: "", reviewer_name: "" });
+  const [connections, setConnections] = useState([]);
 
   useEffect(() => {
     if (systemPaths) {
@@ -86,6 +88,29 @@ export default function SystemSettings({ apiFetch, systemPaths, onCopied }) {
       cancelled = true;
     };
   }, [apiFetch, systemPaths]);
+
+  useEffect(() => {
+    Promise.all([apiFetch("/api/review-settings"), apiFetch("/api/providers")])
+      .then(([settings, providerData]) => {
+        setReviewSettings({ default_judge_connection_id: settings.default_judge_connection_id || "", reviewer_name: settings.reviewer_name || "" });
+        setConnections(providerData.model_connections || []);
+      })
+      .catch((err) => setError(String(err.message || err)));
+  }, [apiFetch]);
+
+  const saveReviewSettings = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      const saved = await apiFetch("/api/review-settings", { method: "PUT", body: JSON.stringify(reviewSettings) });
+      setReviewSettings({ default_judge_connection_id: saved.default_judge_connection_id || "", reviewer_name: saved.reviewer_name || "" });
+      setInfo("裁判与人工复核设置已保存");
+    } catch (err) {
+      setError(String(err.message || err));
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const configured = useMemo(
     () => String(paths?.secret_master_configured || "") === "true",
@@ -188,6 +213,15 @@ export default function SystemSettings({ apiFetch, systemPaths, onCopied }) {
         明文模式下，<code>model-connections</code> 的 API Key 直接以原文写入 <code>manifests/evaluation.sqlite</code>，不再需要 master key。
         如果你希望改为加密模式，把 <code>QUESTION_BANK_PLAIN_API_KEYS=false</code> 写到 <code>.env</code> 后重启后端即可。
       </p>
+
+      <div className="detail-card settings-card">
+        <SectionTitle title="裁判与人工复核" meta="默认设置" />
+        <form className="form-stack" onSubmit={saveReviewSettings}>
+          <label>默认独立裁判模型<select value={reviewSettings.default_judge_connection_id} onChange={(event) => setReviewSettings((prev) => ({ ...prev, default_judge_connection_id: event.target.value }))}><option value="">不自动裁判，进入人工队列</option>{connections.map((connection) => <option key={connection.connection_id} value={connection.connection_id}>{connection.display_name} / {connection.model_name}</option>)}</select></label>
+          <label>本地 Reviewer 名称<input required value={reviewSettings.reviewer_name} onChange={(event) => setReviewSettings((prev) => ({ ...prev, reviewer_name: event.target.value }))} placeholder="例如：张三" /></label>
+          <button type="submit" className="action-button" disabled={saving}>保存复核设置</button>
+        </form>
+      </div>
 
       <div className="detail-card settings-card">
         <SectionTitle title="环境变量" />

@@ -38,6 +38,36 @@
     "question_id": {
       "type": "string"
     },
+    "bank_version": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "bank_item_snapshot": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "bank_item_content_hash": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "snapshot_origin": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "captured",
+        "backfilled",
+        "unavailable",
+        null
+      ]
+    },
     "module": {
       "type": "string"
     },

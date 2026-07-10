@@ -1,34 +1,34 @@
 [
   {
-    "source_key": "agentic_safety_modern",
+    "source_key": "agentic_modern_safety",
     "dataset": "benchmark-curated/agentic-safety-modern",
     "split": "curated",
     "output_file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/agentic_modern_safety_candidates.jsonl",
     "count": 6
   },
   {
-    "source_key": "apps_livecodebench_coding_curated",
-    "dataset": "benchmark-curated/apps-livecodebench-coding",
+    "source_key": "apps_livecodebench_coding",
+    "dataset": "APPS / LiveCodeBench curated",
     "split": "curated",
     "output_file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/apps_livecodebench_coding_candidates.jsonl",
     "count": 12
   },
   {
-    "source_key": "bbh_bbeh_logic_curated",
-    "dataset": "benchmark-curated/bbh-bbeh-logic",
+    "source_key": "bbh_bbeh_logic",
+    "dataset": "BIG-Bench Hard / BBEH curated",
     "split": "curated",
     "output_file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/bbh_bbeh_logic_candidates.jsonl",
     "count": 12
   },
   {
-    "source_key": "bigcode_evalplus_swebench_curated",
-    "dataset": "benchmark-curated/bigcode-evalplus-swebench",
+    "source_key": "bigcode_evalplus_swebench",
+    "dataset": "BigCodeBench / EvalPlus / SWE-bench Lite curated",
     "split": "curated",
     "output_file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/bigcode_evalplus_swebench_candidates.jsonl",
     "count": 12
   },
   {
-    "source_key": "boundary_truthfulness_modern",
+    "source_key": "boundary_truthfulness_safety",
     "dataset": "benchmark-curated/boundary-truthfulness-modern",
     "split": "curated",
     "output_file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/boundary_truthfulness_safety_candidates.jsonl",
@@ -49,9 +49,16 @@
     "count": 1220
   },
   {
+    "source_key": "gpqa_diamond",
+    "dataset": "openai/simple-evals:gpqa_diamond",
+    "split": "diamond",
+    "output_file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/gpqa_diamond_candidates.jsonl",
+    "count": 198
+  },
+  {
     "source_key": "gsm8k",
     "dataset": "openai/gsm8k",
-    "split": "train",
+    "split": "main/train",
     "output_file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/gsm8k_candidates.jsonl",
     "count": 7473
   },
@@ -65,7 +72,7 @@
   {
     "source_key": "hotpotqa",
     "dataset": "hotpotqa/hotpot_qa",
-    "split": "validation",
+    "split": "distractor/validation",
     "output_file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/hotpotqa_candidates.jsonl",
     "count": 7405
   },
@@ -98,6 +105,13 @@
     "count": 442
   },
   {
+    "source_key": "math500",
+    "dataset": "openai/simple-evals:math_500_test",
+    "split": "test",
+    "output_file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/math500_candidates.jsonl",
+    "count": 500
+  },
+  {
     "source_key": "mmlu_pro",
     "dataset": "TIGER-Lab/MMLU-Pro",
     "split": "test",
@@ -105,7 +119,7 @@
     "count": 12032
   },
   {
-    "source_key": "multiturn_jailbreak_modern",
+    "source_key": "multiturn_modern_jailbreak",
     "dataset": "benchmark-curated/multiturn-jailbreak-modern",
     "split": "curated",
     "output_file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/multiturn_modern_jailbreak_candidates.jsonl",
@@ -114,9 +128,16 @@
   {
     "source_key": "or_bench_hard",
     "dataset": "bench-llm/or-bench",
-    "split": "train",
+    "split": "or-bench-hard-1k/train",
     "output_file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/or_bench_hard_candidates.jsonl",
     "count": 1319
+  },
+  {
+    "source_key": "simpleqa",
+    "dataset": "openai/simple-evals:simple_qa_test_set",
+    "split": "test",
+    "output_file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/simpleqa_candidates.jsonl",
+    "count": 4326
   },
   {
     "source_key": "sorrybench",
@@ -140,8 +161,8 @@
     "count": 790
   },
   {
-    "source_key": "zebra_planbench_logic_curated",
-    "dataset": "benchmark-curated/zebra-planbench-logic",
+    "source_key": "zebra_planbench_logic",
+    "dataset": "ZebraLogic / PlanBench curated",
     "split": "curated",
     "output_file": "/mnt/e/BaiduSyncdisk/项目学习/大模型能力漂移/LLM Evaluation/question_bank_workspace/normalized/zebra_planbench_logic_candidates.jsonl",
     "count": 12

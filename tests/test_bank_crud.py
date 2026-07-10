@@ -42,7 +42,7 @@ class BankCrudApiTests(unittest.TestCase):
     def _payload(self, qid: str = "API-TEST-001", **overrides) -> dict:
         base = {
             "question_id": qid,
-            "version": "QB-v1.2",
+            "version": "QB-v1.3",
             "module": "A1",
             "subtype": "math_reasoning",
             "item_format": "single_turn",
@@ -76,12 +76,12 @@ class BankCrudApiTests(unittest.TestCase):
         r = client.post("/api/bank/items", json=self._payload())
         self.assertEqual(r.status_code, 200, r.text)
         self.assertEqual(r.json()["qa_status"], "draft")
-        self.assertEqual(r.json()["version"], "QB-v1.2")
+        self.assertEqual(r.json()["version"], "QB-v1.3")
         # list with qa_status filter
         r = client.get("/api/bank/items/API-TEST-001")
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.json()["question_id"], "API-TEST-001")
-        r = client.get("/api/bank/items", params={"version": "QB-v1.2", "keyword": "API-TEST-001", "limit": 50})
+        r = client.get("/api/bank/items", params={"version": "QB-v1.3", "keyword": "API-TEST-001", "limit": 50})
         self.assertEqual(r.status_code, 200)
         ids = [item["question_id"] for item in r.json()["items"]]
         self.assertIn("API-TEST-001", ids)
@@ -92,7 +92,7 @@ class BankCrudApiTests(unittest.TestCase):
         self.assertIn("qa_statuses", facets)
         self.assertIn("versions", facets)
         self.assertTrue(any(s["value"] == "draft" for s in facets["qa_statuses"]))
-        self.assertTrue(any(s["value"] == "QB-v1.2" for s in facets["versions"]))
+        self.assertTrue(any(s["value"] == "QB-v1.3" for s in facets["versions"]))
         # update
         r = client.put(
             "/api/bank/items/API-TEST-001",

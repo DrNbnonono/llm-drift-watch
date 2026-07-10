@@ -12,6 +12,7 @@ export default {
     models: "模型接入",
     history: "历史 Runs",
     reports: "报告",
+    review: "人工复核",
     settings: "系统设置",
   },
   common: {

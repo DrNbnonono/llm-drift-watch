@@ -13,6 +13,10 @@ SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 from generate_formal_bank import generate_bank  # noqa: E402
+from audit_bank_quality import template_signature, template_similarity  # noqa: E402
+from evaluation_engine import filter_items  # noqa: E402
+from extract_public_sources import extract_last_boxed_answer  # noqa: E402
+from retire_near_duplicate_items import build_retirement_map  # noqa: E402
 from question_bank_runtime import rouge_l_score, run_function_tests  # noqa: E402
 from validate_bank_artifacts import validate_required  # noqa: E402
 
@@ -59,6 +63,42 @@ class QuestionBankPipelineTests(unittest.TestCase):
                 len(module_items),
                 f"{module} still contains exact template duplicates in QB-v1.2",
             )
+
+    def test_quality_audit_detects_parameter_swap(self):
+        left = "A shop sold 12 boxes at 5 dollars each. Return only the answer."
+        right = "A shop sold 27 boxes at 8 dollars each. Return only the answer."
+        self.assertEqual(template_signature(left), template_signature(right))
+        self.assertGreater(template_similarity(left, right), 0.99)
+
+    def test_routine_runs_exclude_draft_and_pilot_items(self):
+        items = [
+            {"question_id": "ready", "module": "A5", "qa_status": "ready"},
+            {"question_id": "frozen", "module": "A5", "qa_status": "frozen"},
+            {"question_id": "pilot", "module": "A5", "qa_status": "pilot"},
+            {"question_id": "draft", "module": "A5", "qa_status": "draft"},
+        ]
+        self.assertEqual(
+            [row["question_id"] for row in filter_items(items, modules=["A5"])],
+            ["ready", "frozen"],
+        )
+        self.assertEqual(
+            [row["question_id"] for row in filter_items(items, question_ids=["pilot"])],
+            ["pilot"],
+        )
+
+    def test_math_boxed_answer_extraction_handles_nested_latex(self):
+        solution = r"Work... Therefore $\boxed{\left(3, \frac{\pi}{2}\right)}$."
+        self.assertEqual(
+            extract_last_boxed_answer(solution),
+            r"\left(3, \frac{\pi}{2}\right)",
+        )
+
+    def test_duplicate_retirement_keeps_one_representative(self):
+        audit = {"modules": {"A1": {"clusters": [["A1-003", "A1-001", "A1-002"]]}}}
+        self.assertEqual(
+            build_retirement_map(audit),
+            {"A1-002": "A1-001", "A1-003": "A1-001"},
+        )
 
 
 if __name__ == "__main__":

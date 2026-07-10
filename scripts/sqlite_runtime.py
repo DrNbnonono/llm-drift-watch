@@ -6,6 +6,7 @@ import json
 import os
 import sqlite3
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,15 @@ DEFAULT_DB_PATH = Path(os.environ.get("QUESTION_BANK_SQLITE_PATH", ROOT / "manif
 DEFAULT_LEGACY_CONFIG_PATH = ROOT / "config" / "providers.json"
 DEFAULT_RUNS_DIR = ROOT / "manifests" / "evaluation_runs"
 DEFAULT_BANK_ITEMS_PATH = ROOT / "final_bank_specs" / "generated" / "final_bank_items.jsonl"
+CURRENT_BANK_VERSION = "QB-v1.3"
+EDITABLE_BANK_VERSIONS = {"QB-v1.3", "QB-v1.3-pilot"}
+SNAPSHOT_FILENAMES = (
+    "final_bank_items_qbv1_0.jsonl",
+    "final_bank_items_qbv1_1.jsonl",
+    "final_bank_items_qbv1_2.jsonl",
+    "final_bank_items_qbv1_3.jsonl",
+    "final_bank_items_qbv1_3_pilot.jsonl",
+)
 
 
 def load_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -56,7 +66,8 @@ class SQLiteStore:
         self._init_schema()
         self.bootstrap_legacy()
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self):
         def _open() -> sqlite3.Connection:
             conn = sqlite3.connect(self.db_path, check_same_thread=False)
             conn.row_factory = sqlite3.Row
@@ -67,7 +78,6 @@ class SQLiteStore:
         try:
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("PRAGMA synchronous=NORMAL")
-            return conn
         except sqlite3.OperationalError as exc:
             if "disk I/O error" not in str(exc):
                 conn.close()
@@ -83,7 +93,11 @@ class SQLiteStore:
             conn = _open()
             conn.execute("PRAGMA journal_mode=DELETE")
             conn.execute("PRAGMA synchronous=NORMAL")
-            return conn
+        try:
+            with conn:
+                yield conn
+        finally:
+            conn.close()
 
     def _init_schema(self) -> None:
         with self._connect() as conn:
@@ -143,8 +157,8 @@ class SQLiteStore:
                 );
 
                 CREATE TABLE IF NOT EXISTS bank_items (
-                    question_id TEXT PRIMARY KEY,
-                    version TEXT,
+                    question_id TEXT NOT NULL,
+                    version TEXT NOT NULL,
                     module TEXT NOT NULL,
                     subtype TEXT,
                     item_format TEXT NOT NULL,
@@ -157,6 +171,18 @@ class SQLiteStore:
                     provenance_json TEXT,
                     search_text TEXT NOT NULL,
                     full_item_json TEXT NOT NULL,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (version, question_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS bank_versions (
+                    version TEXT PRIMARY KEY,
+                    display_name TEXT NOT NULL,
+                    item_count INTEGER NOT NULL DEFAULT 0,
+                    status TEXT NOT NULL,
+                    is_runnable INTEGER NOT NULL DEFAULT 1,
+                    is_editable INTEGER NOT NULL DEFAULT 0,
+                    source_files_json TEXT NOT NULL DEFAULT '[]',
                     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
                 );
 
@@ -211,6 +237,10 @@ class SQLiteStore:
                     source_run_id TEXT,
                     is_retry_attempt INTEGER NOT NULL DEFAULT 0,
                     canonical_selected INTEGER NOT NULL DEFAULT 0,
+                    bank_version TEXT,
+                    bank_item_snapshot_json TEXT,
+                    bank_item_content_hash TEXT,
+                    snapshot_origin TEXT,
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE(run_id, question_id, attempt_run_id),
                     FOREIGN KEY (run_id) REFERENCES runs(run_id) ON DELETE CASCADE
@@ -221,6 +251,75 @@ class SQLiteStore:
                 CREATE INDEX IF NOT EXISTS idx_bank_items_module ON bank_items(module);
                 CREATE INDEX IF NOT EXISTS idx_bank_items_subtype ON bank_items(subtype);
                 CREATE INDEX IF NOT EXISTS idx_bank_items_item_format ON bank_items(item_format);
+
+                CREATE TABLE IF NOT EXISTS judge_assessments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    run_id TEXT NOT NULL,
+                    question_id TEXT NOT NULL,
+                    attempt_run_id TEXT NOT NULL,
+                    judge_connection_id TEXT,
+                    judge_model_alias TEXT,
+                    status TEXT NOT NULL,
+                    score REAL,
+                    verdict TEXT,
+                    criteria_json TEXT NOT NULL DEFAULT '[]',
+                    rationale TEXT,
+                    confidence REAL,
+                    raw_response_json TEXT,
+                    error TEXT,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (run_id) REFERENCES runs(run_id) ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS idx_judge_assessments_item
+                    ON judge_assessments(run_id, question_id, attempt_run_id, id);
+
+                CREATE TABLE IF NOT EXISTS manual_reviews (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    run_id TEXT NOT NULL,
+                    question_id TEXT NOT NULL,
+                    attempt_run_id TEXT NOT NULL,
+                    reviewer TEXT NOT NULL,
+                    score REAL NOT NULL,
+                    verdict TEXT NOT NULL,
+                    note TEXT NOT NULL DEFAULT '',
+                    confirmed INTEGER NOT NULL DEFAULT 1,
+                    needs_review INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (run_id) REFERENCES runs(run_id) ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS idx_manual_reviews_item
+                    ON manual_reviews(run_id, question_id, attempt_run_id, id);
+
+                CREATE TABLE IF NOT EXISTS review_threads (
+                    thread_id TEXT PRIMARY KEY,
+                    run_id TEXT NOT NULL,
+                    question_id TEXT NOT NULL,
+                    attempt_run_id TEXT NOT NULL,
+                    connection_id TEXT,
+                    title TEXT NOT NULL,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (run_id) REFERENCES runs(run_id) ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS idx_review_threads_item
+                    ON review_threads(run_id, question_id, attempt_run_id);
+
+                CREATE TABLE IF NOT EXISTS review_messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    thread_id TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    raw_response_json TEXT,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (thread_id) REFERENCES review_threads(thread_id) ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS idx_review_messages_thread ON review_messages(thread_id, id);
+
+                CREATE TABLE IF NOT EXISTS app_settings (
+                    key TEXT PRIMARY KEY,
+                    value_json TEXT NOT NULL,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                );
 
                 CREATE TABLE IF NOT EXISTS module_dict (
                     code TEXT PRIMARY KEY,
@@ -259,6 +358,7 @@ class SQLiteStore:
                 CREATE INDEX IF NOT EXISTS idx_quota_tag_dict_module ON quota_tag_dict(module_code);
                 """
             )
+            self._migrate_bank_items_composite_identity(conn)
             self._ensure_column(conn, "runs", "connection_id", "TEXT")
             self._ensure_column(conn, "runs", "connection_name", "TEXT")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_runs_connection_id ON runs(connection_id)")
@@ -271,6 +371,14 @@ class SQLiteStore:
             self._ensure_column(conn, "bank_items", "drift_role", "TEXT")
             self._ensure_column(conn, "bank_items", "module_quota_tag", "TEXT")
             self._ensure_column(conn, "bank_items", "notes", "TEXT")
+            self._ensure_column(conn, "run_items", "bank_version", "TEXT")
+            self._ensure_column(conn, "run_items", "bank_item_snapshot_json", "TEXT")
+            self._ensure_column(conn, "run_items", "bank_item_content_hash", "TEXT")
+            self._ensure_column(conn, "run_items", "snapshot_origin", "TEXT")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_items_module ON bank_items(module)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_items_subtype ON bank_items(subtype)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_items_item_format ON bank_items(item_format)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_items_version ON bank_items(version)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_items_difficulty ON bank_items(difficulty)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_items_drift_role ON bank_items(drift_role)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_items_module_quota_tag ON bank_items(module_quota_tag)")
@@ -302,6 +410,48 @@ class SQLiteStore:
             return
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {sql_type}")
 
+    def _migrate_bank_items_composite_identity(self, conn: sqlite3.Connection) -> None:
+        columns = conn.execute("PRAGMA table_info(bank_items)").fetchall()
+        primary_key = [row["name"] for row in sorted(columns, key=lambda row: row["pk"]) if row["pk"]]
+        if primary_key == ["version", "question_id"]:
+            return
+        legacy_items = [json_loads(row["full_item_json"], {}) for row in conn.execute(
+            "SELECT full_item_json FROM bank_items"
+        ).fetchall()]
+        conn.execute("ALTER TABLE bank_items RENAME TO bank_items_legacy_identity")
+        conn.execute(
+            """
+            CREATE TABLE bank_items (
+                question_id TEXT NOT NULL,
+                version TEXT NOT NULL,
+                module TEXT NOT NULL,
+                subtype TEXT,
+                item_format TEXT NOT NULL,
+                prompt_template TEXT,
+                turn_script_json TEXT,
+                ground_truth_json TEXT,
+                scoring_method TEXT NOT NULL,
+                scoring_params_json TEXT,
+                rotation_policy_json TEXT,
+                provenance_json TEXT,
+                search_text TEXT NOT NULL,
+                full_item_json TEXT NOT NULL,
+                qa_status TEXT NOT NULL DEFAULT 'ready',
+                difficulty TEXT,
+                drift_role TEXT,
+                module_quota_tag TEXT,
+                notes TEXT,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (version, question_id)
+            )
+            """
+        )
+        for item in legacy_items:
+            if item:
+                item["version"] = item.get("version") or CURRENT_BANK_VERSION
+                self._insert_bank_item(conn, item)
+        conn.execute("DROP TABLE bank_items_legacy_identity")
+
     def bootstrap_legacy(self) -> None:
         self.bootstrap_bank_items()
         if self.count_rows("providers") == 0 and self.legacy_config_path.exists():
@@ -320,9 +470,94 @@ class SQLiteStore:
     def bootstrap_bank_items(self) -> None:
         if not self.bank_items_path.exists():
             return
-        on_disk = load_jsonl(self.bank_items_path)
-        if self.count_rows("bank_items") != len(on_disk):
+        generated_dir = self.bank_items_path.parent
+        sources = [generated_dir / name for name in SNAPSHOT_FILENAMES]
+        sources.append(self.bank_items_path)
+        combined: dict[tuple[str, str], dict[str, Any]] = {}
+        source_files: dict[str, list[str]] = {}
+        for path in sources:
+            if not path.exists():
+                continue
+            for row in load_jsonl(path):
+                version = str(row.get("version") or CURRENT_BANK_VERSION)
+                row["version"] = version
+                combined[(version, row["question_id"])] = row
+                source_files.setdefault(version, []).append(path.name)
+        on_disk = list(combined.values())
+        existing = {
+            (row.get("version") or CURRENT_BANK_VERSION, row["question_id"]): row
+            for row in self.get_all_bank_items()
+        }
+        if existing != combined:
             self.replace_bank_items(on_disk)
+        self._refresh_bank_versions(source_files)
+
+    def _refresh_bank_versions(self, source_files: dict[str, list[str]]) -> None:
+        with self._connect() as conn:
+            counts = conn.execute(
+                "SELECT version, COUNT(*) AS item_count FROM bank_items GROUP BY version"
+            ).fetchall()
+            present = {row["version"] for row in counts}
+            conn.execute("DELETE FROM bank_versions")
+            for row in counts:
+                version = row["version"]
+                if version == CURRENT_BANK_VERSION:
+                    status = "current"
+                elif version.endswith("-pilot"):
+                    status = "pilot"
+                else:
+                    status = "legacy"
+                conn.execute(
+                    """
+                    INSERT INTO bank_versions (
+                        version, display_name, item_count, status, is_runnable, is_editable,
+                        source_files_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        version,
+                        version,
+                        int(row["item_count"]),
+                        status,
+                        1,
+                        1 if version in EDITABLE_BANK_VERSIONS else 0,
+                        json_dumps(sorted(set(source_files.get(version, [])))),
+                    ),
+                )
+            # Keep metadata deterministic even when a configured snapshot is empty.
+            for version in ("QB-v1.0", "QB-v1.1", "QB-v1.2", CURRENT_BANK_VERSION):
+                if version not in present:
+                    conn.execute(
+                        "INSERT INTO bank_versions (version, display_name, item_count, status, is_runnable, is_editable) VALUES (?, ?, 0, ?, 1, ?)",
+                        (version, version, "current" if version == CURRENT_BANK_VERSION else "legacy", 1 if version in EDITABLE_BANK_VERSIONS else 0),
+                    )
+
+    def list_bank_versions(self) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM bank_versions ORDER BY version"
+            ).fetchall()
+        return [
+            {
+                "version": row["version"],
+                "display_name": row["display_name"],
+                "item_count": int(row["item_count"]),
+                "status": row["status"],
+                "is_runnable": bool(row["is_runnable"]),
+                "is_editable": bool(row["is_editable"]),
+                "source_files": json_loads(row["source_files_json"], []),
+            }
+            for row in rows
+        ]
+
+    def _assert_version_editable(self, version: str) -> None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT is_editable FROM bank_versions WHERE version = ?", (version,)
+            ).fetchone()
+        editable = version in EDITABLE_BANK_VERSIONS if row is None else bool(row["is_editable"])
+        if not editable:
+            raise ValueError(f"bank version is read-only: {version}")
 
     def upsert_provider(self, payload: dict[str, Any]) -> None:
         with self._connect() as conn:
@@ -590,9 +825,13 @@ class SQLiteStore:
             for row in rows:
                 self._insert_bank_item(conn, row)
 
-    def get_bank_item(self, question_id: str) -> dict[str, Any] | None:
+    def get_bank_item(self, question_id: str, version: str | None = None) -> dict[str, Any] | None:
+        version = version or CURRENT_BANK_VERSION
         with self._connect() as conn:
-            row = conn.execute("SELECT * FROM bank_items WHERE question_id = ?", (question_id,)).fetchone()
+            row = conn.execute(
+                "SELECT * FROM bank_items WHERE version = ? AND question_id = ?",
+                (version, question_id),
+            ).fetchone()
         if not row:
             return None
         return json_loads(row["full_item_json"], {})
@@ -652,41 +891,51 @@ class SQLiteStore:
         }
 
     def create_bank_item(self, row: dict[str, Any]) -> dict[str, Any]:
+        version = str(row.get("version") or CURRENT_BANK_VERSION)
+        row["version"] = version
+        self._assert_version_editable(version)
         with self._connect() as conn:
             existing = conn.execute(
-                "SELECT question_id FROM bank_items WHERE question_id = ?",
-                (row["question_id"],),
+                "SELECT question_id FROM bank_items WHERE version = ? AND question_id = ?",
+                (version, row["question_id"]),
             ).fetchone()
             if existing:
                 raise ValueError(f"question_id already exists: {row['question_id']}")
             self._insert_bank_item(conn, row)
         return row
 
-    def update_bank_item(self, question_id: str, row: dict[str, Any]) -> dict[str, Any]:
+    def update_bank_item(self, question_id: str, row: dict[str, Any], version: str | None = None) -> dict[str, Any]:
+        version = version or str(row.get("version") or CURRENT_BANK_VERSION)
+        self._assert_version_editable(version)
         row["question_id"] = question_id
+        row["version"] = version
         with self._connect() as conn:
             existing = conn.execute(
-                "SELECT question_id FROM bank_items WHERE question_id = ?",
-                (question_id,),
+                "SELECT question_id FROM bank_items WHERE version = ? AND question_id = ?",
+                (version, question_id),
             ).fetchone()
             if not existing:
                 raise KeyError(question_id)
             self._insert_bank_item(conn, row)
         return row
 
-    def delete_bank_item(self, question_id: str) -> bool:
+    def delete_bank_item(self, question_id: str, version: str | None = None) -> bool:
+        version = version or CURRENT_BANK_VERSION
+        self._assert_version_editable(version)
         with self._connect() as conn:
             cursor = conn.execute(
-                "DELETE FROM bank_items WHERE question_id = ?",
-                (question_id,),
+                "DELETE FROM bank_items WHERE version = ? AND question_id = ?",
+                (version, question_id),
             )
         return cursor.rowcount > 0
 
-    def archive_bank_item(self, question_id: str) -> dict[str, Any] | None:
+    def archive_bank_item(self, question_id: str, version: str | None = None) -> dict[str, Any] | None:
+        version = version or CURRENT_BANK_VERSION
+        self._assert_version_editable(version)
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT full_item_json FROM bank_items WHERE question_id = ?",
-                (question_id,),
+                "SELECT full_item_json FROM bank_items WHERE version = ? AND question_id = ?",
+                (version, question_id),
             ).fetchone()
             if not row:
                 return None
@@ -696,12 +945,14 @@ class SQLiteStore:
         return item
 
     def restore_bank_item(
-        self, question_id: str, qa_status: str = "ready"
+        self, question_id: str, qa_status: str = "ready", version: str | None = None
     ) -> dict[str, Any] | None:
+        version = version or CURRENT_BANK_VERSION
+        self._assert_version_editable(version)
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT full_item_json FROM bank_items WHERE question_id = ?",
-                (question_id,),
+                "SELECT full_item_json FROM bank_items WHERE version = ? AND question_id = ?",
+                (version, question_id),
             ).fetchone()
             if not row:
                 return None
@@ -713,33 +964,58 @@ class SQLiteStore:
     def get_all_bank_items(self) -> list[dict[str, Any]]:
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT full_item_json FROM bank_items ORDER BY question_id"
+                "SELECT full_item_json FROM bank_items ORDER BY version, question_id"
             ).fetchall()
         return [json_loads(row["full_item_json"], {}) for row in rows]
 
-    def get_bank_facets(self) -> dict[str, Any]:
+    def get_bank_facets(
+        self,
+        *,
+        version: str | None = None,
+        module: str | None = None,
+    ) -> dict[str, Any]:
+        version_clauses: list[str] = []
+        version_params: list[Any] = []
+        if version:
+            version_clauses.append("version = ?")
+            version_params.append(version)
+        scoped_clauses = list(version_clauses)
+        scoped_params = list(version_params)
+        if module:
+            scoped_clauses.append("module = ?")
+            scoped_params.append(module)
+        version_where = f"WHERE {' AND '.join(version_clauses)}" if version_clauses else ""
+        scoped_where = f"WHERE {' AND '.join(scoped_clauses)}" if scoped_clauses else ""
+        subtype_clauses = [*scoped_clauses, "subtype IS NOT NULL", "subtype != ''"]
+        subtype_where = f"WHERE {' AND '.join(subtype_clauses)}"
         with self._connect() as conn:
-            total_row = conn.execute("SELECT COUNT(*) AS n FROM bank_items").fetchone()
+            total_row = conn.execute(
+                f"SELECT COUNT(*) AS n FROM bank_items {scoped_where}", scoped_params
+            ).fetchone()
             versions = conn.execute(
                 "SELECT version AS value, COUNT(*) AS count FROM bank_items GROUP BY version ORDER BY version"
             ).fetchall()
             modules = conn.execute(
-                "SELECT module AS value, COUNT(*) AS count FROM bank_items GROUP BY module ORDER BY module"
+                f"SELECT module AS value, COUNT(*) AS count FROM bank_items {version_where} GROUP BY module ORDER BY module",
+                version_params,
             ).fetchall()
             item_formats = conn.execute(
-                "SELECT item_format AS value, COUNT(*) AS count FROM bank_items GROUP BY item_format ORDER BY item_format"
+                f"SELECT item_format AS value, COUNT(*) AS count FROM bank_items {scoped_where} GROUP BY item_format ORDER BY item_format",
+                scoped_params,
             ).fetchall()
             qa_statuses = conn.execute(
-                "SELECT qa_status AS value, COUNT(*) AS count FROM bank_items GROUP BY qa_status ORDER BY qa_status"
+                f"SELECT qa_status AS value, COUNT(*) AS count FROM bank_items {scoped_where} GROUP BY qa_status ORDER BY qa_status",
+                scoped_params,
             ).fetchall()
             subtypes = conn.execute(
-                """
+                f"""
                 SELECT subtype AS value, module, COUNT(*) AS count
                 FROM bank_items
-                WHERE subtype IS NOT NULL AND subtype != ''
+                {subtype_where}
                 GROUP BY subtype, module
                 ORDER BY module, subtype
-                """
+                """,
+                scoped_params,
             ).fetchall()
         subtype_meta: dict[str, dict[str, Any]] = {}
         for row in subtypes:
@@ -829,8 +1105,9 @@ class SQLiteStore:
             INSERT INTO run_items (
                 run_id, question_id, module, item_format, score_method, primary_score, aux_score,
                 status, response_json, score_details_json, error, failure_type, started_at, finished_at,
-                latency_ms, provider_id, model_alias, attempt_run_id, source_run_id, is_retry_attempt, canonical_selected
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                latency_ms, provider_id, model_alias, attempt_run_id, source_run_id, is_retry_attempt, canonical_selected,
+                bank_version, bank_item_snapshot_json, bank_item_content_hash, snapshot_origin
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(run_id, question_id, attempt_run_id) DO UPDATE SET
                 module=excluded.module,
                 item_format=excluded.item_format,
@@ -849,7 +1126,11 @@ class SQLiteStore:
                 model_alias=excluded.model_alias,
                 source_run_id=excluded.source_run_id,
                 is_retry_attempt=excluded.is_retry_attempt,
-                canonical_selected=excluded.canonical_selected
+                canonical_selected=excluded.canonical_selected,
+                bank_version=excluded.bank_version,
+                bank_item_snapshot_json=excluded.bank_item_snapshot_json,
+                bank_item_content_hash=excluded.bank_item_content_hash,
+                snapshot_origin=excluded.snapshot_origin
             """,
             (
                 row["run_id"],
@@ -873,6 +1154,10 @@ class SQLiteStore:
                 row.get("source_run_id") or row["run_id"],
                 1 if row.get("is_retry_attempt") else 0,
                 1 if row.get("canonical_selected") else 0,
+                row.get("bank_version"),
+                json_dumps(row.get("bank_item_snapshot")) if row.get("bank_item_snapshot") is not None else None,
+                row.get("bank_item_content_hash"),
+                row.get("snapshot_origin"),
             ),
         )
 
@@ -895,8 +1180,7 @@ class SQLiteStore:
                 turn_script_json, ground_truth_json, scoring_method, scoring_params_json,
                 rotation_policy_json, provenance_json, qa_status, search_text, full_item_json
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(question_id) DO UPDATE SET
-                version=excluded.version,
+            ON CONFLICT(version, question_id) DO UPDATE SET
                 module=excluded.module,
                 subtype=excluded.subtype,
                 item_format=excluded.item_format,
@@ -981,7 +1265,156 @@ class SQLiteStore:
             "latency_ms": row["latency_ms"],
             "is_retry_attempt": bool(row["is_retry_attempt"]),
             "canonical_selected": bool(row["canonical_selected"]),
+            "bank_version": row["bank_version"],
+            "bank_item_snapshot": json_loads(row["bank_item_snapshot_json"], None),
+            "bank_item_content_hash": row["bank_item_content_hash"],
+            "snapshot_origin": row["snapshot_origin"],
         }
+
+    # ------------------------------------------------------------------
+    # Judge / manual review / follow-up conversation persistence
+    # ------------------------------------------------------------------
+    def add_judge_assessment(self, payload: dict[str, Any]) -> dict[str, Any]:
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO judge_assessments (
+                    run_id, question_id, attempt_run_id, judge_connection_id, judge_model_alias,
+                    status, score, verdict, criteria_json, rationale, confidence,
+                    raw_response_json, error
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    payload["run_id"], payload["question_id"], payload.get("attempt_run_id") or payload["run_id"],
+                    payload.get("judge_connection_id"), payload.get("judge_model_alias"), payload.get("status", "ok"),
+                    payload.get("score"), payload.get("verdict"), json_dumps(payload.get("criteria", [])),
+                    payload.get("rationale"), payload.get("confidence"),
+                    json_dumps(payload.get("raw_response")) if payload.get("raw_response") is not None else None,
+                    payload.get("error"),
+                ),
+            )
+            assessment_id = cursor.lastrowid
+        return self.get_judge_assessment(int(assessment_id))
+
+    def get_judge_assessment(self, assessment_id: int) -> dict[str, Any]:
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM judge_assessments WHERE id = ?", (assessment_id,)).fetchone()
+        if row is None:
+            raise KeyError(assessment_id)
+        return self._decode_judge_row(row)
+
+    def list_judge_assessments(self, run_id: str, question_id: str, attempt_run_id: str | None = None) -> list[dict[str, Any]]:
+        sql = "SELECT * FROM judge_assessments WHERE run_id = ? AND question_id = ?"
+        params: list[Any] = [run_id, question_id]
+        if attempt_run_id:
+            sql += " AND attempt_run_id = ?"
+            params.append(attempt_run_id)
+        sql += " ORDER BY id"
+        with self._connect() as conn:
+            rows = conn.execute(sql, params).fetchall()
+        return [self._decode_judge_row(row) for row in rows]
+
+    @staticmethod
+    def _decode_judge_row(row: sqlite3.Row) -> dict[str, Any]:
+        return {
+            "id": row["id"], "run_id": row["run_id"], "question_id": row["question_id"],
+            "attempt_run_id": row["attempt_run_id"], "judge_connection_id": row["judge_connection_id"],
+            "judge_model_alias": row["judge_model_alias"], "status": row["status"], "score": row["score"],
+            "verdict": row["verdict"], "criteria": json_loads(row["criteria_json"], []),
+            "rationale": row["rationale"], "confidence": row["confidence"],
+            "raw_response": json_loads(row["raw_response_json"], None), "error": row["error"],
+            "created_at": row["created_at"],
+        }
+
+    def add_manual_review(self, payload: dict[str, Any]) -> dict[str, Any]:
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO manual_reviews (
+                    run_id, question_id, attempt_run_id, reviewer, score, verdict, note, confirmed, needs_review
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    payload["run_id"], payload["question_id"], payload.get("attempt_run_id") or payload["run_id"],
+                    payload["reviewer"], payload["score"], payload["verdict"], payload.get("note", ""),
+                    1 if payload.get("confirmed", True) else 0, 1 if payload.get("needs_review", False) else 0,
+                ),
+            )
+            review_id = cursor.lastrowid
+            row = conn.execute("SELECT * FROM manual_reviews WHERE id = ?", (review_id,)).fetchone()
+        return self._decode_manual_row(row)
+
+    def list_manual_reviews(self, run_id: str, question_id: str, attempt_run_id: str | None = None) -> list[dict[str, Any]]:
+        sql = "SELECT * FROM manual_reviews WHERE run_id = ? AND question_id = ?"
+        params: list[Any] = [run_id, question_id]
+        if attempt_run_id:
+            sql += " AND attempt_run_id = ?"
+            params.append(attempt_run_id)
+        sql += " ORDER BY id"
+        with self._connect() as conn:
+            rows = conn.execute(sql, params).fetchall()
+        return [self._decode_manual_row(row) for row in rows]
+
+    @staticmethod
+    def _decode_manual_row(row: sqlite3.Row) -> dict[str, Any]:
+        return {
+            "id": row["id"], "run_id": row["run_id"], "question_id": row["question_id"],
+            "attempt_run_id": row["attempt_run_id"], "reviewer": row["reviewer"], "score": row["score"],
+            "verdict": row["verdict"], "note": row["note"], "confirmed": bool(row["confirmed"]),
+            "needs_review": bool(row["needs_review"]), "created_at": row["created_at"],
+        }
+
+    def create_review_thread(self, payload: dict[str, Any]) -> dict[str, Any]:
+        thread_id = payload.get("thread_id") or f"review-{uuid.uuid4().hex[:12]}"
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO review_threads (thread_id, run_id, question_id, attempt_run_id, connection_id, title) VALUES (?, ?, ?, ?, ?, ?)",
+                (thread_id, payload["run_id"], payload["question_id"], payload.get("attempt_run_id") or payload["run_id"], payload.get("connection_id"), payload.get("title") or payload["question_id"]),
+            )
+        return self.get_review_thread(thread_id)
+
+    def add_review_message(self, thread_id: str, role: str, content: str, raw_response: Any = None) -> dict[str, Any]:
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "INSERT INTO review_messages (thread_id, role, content, raw_response_json) VALUES (?, ?, ?, ?)",
+                (thread_id, role, content, json_dumps(raw_response) if raw_response is not None else None),
+            )
+            conn.execute("UPDATE review_threads SET updated_at = CURRENT_TIMESTAMP WHERE thread_id = ?", (thread_id,))
+            row = conn.execute("SELECT * FROM review_messages WHERE id = ?", (cursor.lastrowid,)).fetchone()
+        return self._decode_message_row(row)
+
+    def get_review_thread(self, thread_id: str) -> dict[str, Any]:
+        with self._connect() as conn:
+            thread = conn.execute("SELECT * FROM review_threads WHERE thread_id = ?", (thread_id,)).fetchone()
+            messages = conn.execute("SELECT * FROM review_messages WHERE thread_id = ? ORDER BY id", (thread_id,)).fetchall()
+        if thread is None:
+            raise KeyError(thread_id)
+        return {**dict(thread), "messages": [self._decode_message_row(row) for row in messages]}
+
+    def list_review_threads(self, run_id: str | None = None) -> list[dict[str, Any]]:
+        sql, params = "SELECT * FROM review_threads", []
+        if run_id:
+            sql, params = sql + " WHERE run_id = ?", [run_id]
+        sql += " ORDER BY updated_at DESC"
+        with self._connect() as conn:
+            return [dict(row) for row in conn.execute(sql, params).fetchall()]
+
+    @staticmethod
+    def _decode_message_row(row: sqlite3.Row) -> dict[str, Any]:
+        return {"id": row["id"], "thread_id": row["thread_id"], "role": row["role"], "content": row["content"], "raw_response": json_loads(row["raw_response_json"], None), "created_at": row["created_at"]}
+
+    def get_setting(self, key: str, default: Any = None) -> Any:
+        with self._connect() as conn:
+            row = conn.execute("SELECT value_json FROM app_settings WHERE key = ?", (key,)).fetchone()
+        return json_loads(row["value_json"], default) if row else default
+
+    def set_setting(self, key: str, value: Any) -> Any:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO app_settings (key, value_json) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json, updated_at=CURRENT_TIMESTAMP",
+                (key, json_dumps(value)),
+            )
+        return value
 
     # ------------------------------------------------------------------
     # Module / Subtype / QuotaTag dictionary CRUD (Phase 3)

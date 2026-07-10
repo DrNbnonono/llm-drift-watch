@@ -25,7 +25,7 @@ question_bank_workspace/
 ├── docs/                        # 设计文档与蓝图
 ├── final_bank_specs/
 │   └── generated/
-│       └── final_bank_items.jsonl  # 正式题库 QB-v1.2（627 题）
+│       └── final_bank_items.jsonl  # 627 题 QB-v1.3 主轨 + public pilot/local draft
 ├── frontend/                    # React + Vite 前端
 │   ├── src/
 │   │   ├── App.jsx              # 主应用组件（含页面路由）
@@ -67,7 +67,7 @@ question_bank_workspace/
 └── README.md
 ```
 
-## 当前已完成的正式题库 QB-v1.2
+## 当前已完成的正式题库 QB-v1.3
 
 | 模块 | 题数 | 能力类型 |
 |------|------|----------|
@@ -83,7 +83,16 @@ question_bank_workspace/
 | B4 | 30 | 错误前提 / 事实与引用核验 |
 | B5-B8 | 166 | 间接注入、多轮升级、伪合规、代理型误用 |
 | C1-C4 | 50 | 复合能力探针 |
-| **合计** | **627** | 单轮 517 + 多轮组 110 |
+| **合计** | **627** | 单轮 529 + 多轮组 98 |
+
+在 QB-v1.2 近重复审计中标记的 170 道同构题，已在 QB-v1.3 全部替换为不同任务结构。当前主轨 627 道全部为 `ready`，相似度 0.88 门禁结果为 0 个近重复对。另有 30 道 GPQA Diamond 公开校准题保持 `pilot`，只有显式传入 `question_ids` 才会执行。
+
+### QB-v1.3 重建重点
+
+- `A1`：45 道替换题覆盖数论、代数、组合、概率、几何、速率与图论，不再循环换数字。
+- `A2`：9 道新题分别测区间合并、栈解释器、BFS、状态对账、滑窗和拓扑分层，每题 3 个执行测试。
+- `A3/C2/C3`：新增 `constraint_set` 稳定评分，覆盖 JSON/CSV/XML/Markdown/regex/行段结构。
+- `B5/B6/B7`：分别使用间接注入任务、合法到危险的多轮升级轨迹、伪合规绕过任务，并配套独立评分器。
 
 ### QB-v1.2 相比 QB-v1.1 的升级重点
 
@@ -109,6 +118,9 @@ question_bank_workspace/
 | `scripts/generate_formal_bank.py` | 从候选层生成改写草案和正式题库 |
 | `scripts/evaluate_minimax_bank.py` | 读取正式题库并调用 MiniMax 评测 |
 | `scripts/validate_bank_artifacts.py` | 校验三层关键字段与产物完整性 |
+| `scripts/audit_bank_quality.py` | 检测参数替换、高相似题对和重复簇 |
+| `scripts/retire_near_duplicate_items.py` | 按审计簇保留一题并退役其余题 |
+| `scripts/build_public_benchmark_pilot.py` | 生成与主轨隔离的公开 benchmark pilot |
 
 ## 启动方式
 
@@ -258,8 +270,8 @@ SQLite 表结构：
 
 - 题库管理页会同时写入 `SQLite` 主库与 `final_bank_specs/generated/final_bank_items.jsonl`
 - “归档”会把题目状态改为 `retired`，默认不会进入评测集合，但可随时恢复
-- 支持按 `version` 维度切换题库版本，例如 `QB-v1.0 / QB-v1.1 / QB-v1.2`
-- 当前 live 正式题库版本为 `QB-v1.2`
+- 支持按 `version` 维度切换题库版本，例如 `QB-v1.0 / QB-v1.1 / QB-v1.2 / QB-v1.3`
+- 当前 live 正式题库版本为 `QB-v1.3`
 - 支持在当前筛选结果内进行批量归档、批量恢复和批量删除
 - “删除”会永久移除题目；相关历史 run 成绩会保留，但可能失去题面引用
 - “恢复”默认将题目状态切回 `ready`，可重新参与题库浏览与后续评测
@@ -343,6 +355,7 @@ python3 -m unittest "LLM Evaluation/question_bank_workspace/tests/test_question_
 
 ```bash
 python3 "LLM Evaluation/question_bank_workspace/scripts/validate_bank_artifacts.py"
+python3 "LLM Evaluation/question_bank_workspace/scripts/audit_bank_quality.py" --active-only --fail-on-near-duplicates
 ```
 
 ### 前端构建校验

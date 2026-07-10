@@ -1,0 +1,47 @@
+{
+  "snapshot_version": "QB-v1.3-pilot",
+  "captured_on": "2026-07-10",
+  "git_repositories": [
+    {
+      "name": "openai/simple-evals",
+      "url": "https://github.com/openai/simple-evals.git",
+      "local_path": "raw_sources/simple-evals",
+      "commit": "652c89d0ca9df547706735883097e9537d40dc47"
+    },
+    {
+      "name": "hendrycks/math",
+      "url": "https://github.com/hendrycks/math.git",
+      "local_path": "raw_sources/math",
+      "commit": "985bdc1696e88e8643f081a0ff4719da39f2ae2a"
+    },
+    {
+      "name": "openai/grade-school-math",
+      "url": "https://github.com/openai/grade-school-math.git",
+      "local_path": "raw_sources/grade-school-math",
+      "commit": "3101c7d5072418e28b9008a6636bde82a006892c"
+    },
+    {
+      "name": "livecodebench/livecodebench",
+      "url": "https://github.com/LiveCodeBench/LiveCodeBench.git",
+      "local_path": "raw_sources/livecodebench",
+      "commit": "28fef95ea8c9f7a547c8329f2cd3d32b92c1fa24"
+    }
+  ],
+  "downloaded_artifacts": [
+    {
+      "name": "GPQA Diamond",
+      "local_path": "raw_sources/simple-evals/gpqa_diamond.csv",
+      "sha256": "41d1213cd7a4998605a26c2798500652572007161b3a92817ba46b35befcd305"
+    },
+    {
+      "name": "SimpleQA",
+      "local_path": "raw_sources/simple-evals/simple_qa_test_set.csv",
+      "sha256": "feee3f7e7db3617e94e8fcf1977b756ec420ef8568f4e0fcbbe0e92e9d5fc032"
+    },
+    {
+      "name": "MATH-500",
+      "local_path": "raw_sources/simple-evals/math_500_test.csv",
+      "sha256": "830003254c2894832217e1da6ed7fd9304546d2161640c1ce05ab9cccf532e2f"
+    }
+  ]
+}

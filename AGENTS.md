@@ -21,7 +21,7 @@
 |-------------|------|
 | `config/providers.json` | 非密钥模型配置镜像（由 SQLite 同步回写，勿手动编辑） |
 | `docs/` | 设计文档与蓝图 |
-| `final_bank_specs/generated/final_bank_items.jsonl` | 正式题库 QB-v1.1（627 题） |
+| `final_bank_specs/generated/final_bank_items.jsonl` | live 题库：627 题 QB-v1.3 主轨 + 公开校准 pilot/local draft |
 | `frontend/` | React + Vite 前端 |
 | `frontend/src/App.jsx` | 主应用组件（含页面路由） |
 | `manifests/evaluation.sqlite` | 主运行态数据库（gitignore） |
@@ -51,6 +51,11 @@
 | `evaluate_minimax_bank.py` | 读取正式题库并调用 MiniMax 评测 |
 | `validate_with_minimax.py` | MiniMax 验证脚本 |
 | `validate_bank_artifacts.py` | 校验三层关键字段与产物完整性 |
+| `audit_bank_quality.py` | 屏蔽数字后检测参数替换和高相似重复簇 |
+| `retire_near_duplicate_items.py` | 每个重复簇保留一题，其余标记为 retired |
+| `build_public_benchmark_pilot.py` | 生成隔离的公开 benchmark 校准 pilot |
+| `generate_qbv13_bank.py` | 生成 627 题 QB-v1.3 正式主轨并合并 pilot/local draft overlay |
+| `qbv13_replacement_builders.py` | QB-v1.3 的 170 道独立结构替换题定义 |
 
 ## 3. 运行架构
 
@@ -408,6 +413,14 @@ npm run build
 - 当前已验证的端口为 `8002` / `5177`（手动指定 `--port` 和 `VITE_API_BASE`）
 
 ## 12. 后续迭代建议
+
+### 12.1 题库质量现状（2026-07-10）
+
+- QB-v1.0 / v1.1 / v1.2 历史快照均保留不变。
+- QB-v1.3 正式主轨共 627 题、全部 `ready`；live 额外包含 30 `pilot` 和 1 条用户 local draft。
+- QB-v1.2 中识别的 170 道同构题已全部独立重建；QB-v1.3 在 0.88 阈值下近重复对为 0。
+- GPQA Diamond 198 条已标准化，30 题作为 `QB-v1.3-pilot`；SimpleQA 4,326 条和 MATH-500 500 条在候选层。
+- 例行 run 默认只选 `ready/frozen`，pilot/draft 只能通过显式 `question_ids` 执行。
 
 优先顺序建议：
 

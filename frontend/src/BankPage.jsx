@@ -51,7 +51,7 @@ const MODULE_TONE = {}; // populated from /api/dict/modules; legacy keys still r
 function createEmptyDraft() {
   return {
     question_id: "",
-    version: "QB-v1.2",
+    version: "QB-v1.3",
     module: "A1",
     subtype: "",
     item_format: "single_turn",
@@ -80,7 +80,7 @@ function fromBankItem(item) {
   const prov = item.provenance || {};
   return {
     question_id: item.question_id || "",
-    version: item.version || "QB-v1.2",
+    version: item.version || "QB-v1.3",
     module: item.module || "A1",
     subtype: item.subtype || "",
     item_format: item.item_format || "single_turn",
@@ -137,7 +137,7 @@ function buildPayload(draft) {
     : null;
   return {
     question_id: draft.question_id.trim(),
-    version: draft.version || "QB-v1.2",
+    version: draft.version || "QB-v1.3",
     module: draft.module,
     subtype: draft.subtype || null,
     item_format: draft.item_format,
@@ -311,17 +311,23 @@ function BankFormModal({ open, mode, initial, busy, error, moduleOptions = [], o
                 <input
                   value={draft.version}
                   onChange={(event) => updateField("version", event.target.value)}
-                  placeholder="QB-v1.2"
+                  placeholder="QB-v1.3"
                 />
               </div>
               <div className="bank-form-field">
                 <label>{t("forms.module")}</label>
                 <select value={draft.module} onChange={(event) => updateField("module", event.target.value)}>
-                  {(moduleOptions.length ? moduleOptions : [{code:"A1"},{code:"A2"}]).map((m) => (
-                    <option key={m.code} value={m.code}>
-                      {m.code}{m.display_name ? ` · ${m.display_name}` : ""}
-                    </option>
-                  ))}
+                  {(moduleOptions.length ? moduleOptions : [{code:"A1"},{code:"A2"}]).map((m) => {
+                    const parts = [m.code];
+                    if (m.display_name) parts.push(m.display_name);
+                    if (m.parent_group) parts.push(m.parent_group);
+                    const title = m.description ? `${m.code} ${m.display_name || ""} — ${m.description}` : parts.join(" · ");
+                    return (
+                      <option key={m.code} value={m.code} title={title}>
+                        {parts.join(" · ")}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
               <div className="bank-form-field">
@@ -597,6 +603,14 @@ function BankDetail({ item, onAction, busy, canMutate }) {
   const status = item.qa_status || "ready";
   const isArchived = status === "retired";
   const isMulti = item.item_format === "multi_turn_group";
+  const hasGroundTruth = item.ground_truth !== null && item.ground_truth !== undefined && item.ground_truth !== "";
+  const scoringBasisTitle = hasGroundTruth
+    ? "标准答案"
+    : item.scoring_method === "exec"
+      ? "测试用例与预期输出"
+      : ["constraint_set", "rule", "injection_resilience", "escalation_resilience", "pseudo_compliance_resilience"].includes(item.scoring_method)
+        ? "必需条件、禁止条件与评分规则"
+        : "无唯一标准答案：期望行为与裁判 Rubric";
   return (
     <div className="bank-detail">
       <div className="bank-detail-head">
@@ -673,18 +687,19 @@ function BankDetail({ item, onAction, busy, canMutate }) {
 
         <section className="bank-section">
           <div className="bank-section-head">
-            <span className="bank-section-title">评分</span>
-            <span className="bank-section-note">scoring</span>
+            <span className="bank-section-title">参考答案与评分依据</span>
+            <span className="bank-section-note">{scoringBasisTitle}</span>
           </div>
           <div className="bank-kv-grid">
             <div className="bank-kv"><span className="bank-kv-key">Method</span><span className="bank-kv-value mono-id">{item.scoring_method || "—"}</span></div>
             <div className="bank-kv"><span className="bank-kv-key">Ground Truth</span><span className="bank-kv-value mono-id">
-              {item.ground_truth === null || item.ground_truth === undefined ? "—" : String(item.ground_truth)}
+              {hasGroundTruth ? String(item.ground_truth) : "无单一 Ground Truth"}
             </span></div>
           </div>
           <pre className="bank-prompt-block" style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: "0.82rem" }}>
             {JSON.stringify(item.scoring_params || {}, null, 2)}
           </pre>
+          {item.review_policy ? <pre className="bank-prompt-block" style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: "0.82rem" }}>{JSON.stringify(item.review_policy, null, 2)}</pre> : null}
         </section>
 
         <section className="bank-section">
@@ -728,7 +743,7 @@ export default function BankPage({ apiFetch, systemPaths, onToast, canMutate = t
     qa_statuses: [],
   });
   const [filters, setFilters] = useState({
-    version: "",
+    version: "QB-v1.3",
     module: "",
     subtype: "",
     item_format: "",
@@ -742,19 +757,30 @@ export default function BankPage({ apiFetch, systemPaths, onToast, canMutate = t
   const [selectedIds, setSelectedIds] = useState([]);
   const [detailOpen, setDetailOpen] = useState(false);
   const [moduleDict, setModuleDict] = useState([]);
+  const [subtypeDict, setSubtypeDict] = useState([]);
   const requestSeq = useRef(0);
 
   const [formState, setFormState] = useState({ open: false, mode: "create", item: null, busy: false, error: null });
   const [confirmState, setConfirmState] = useState({ open: false, kind: null, item: null, items: [], busy: false });
 
   const availableSubtypes = useMemo(() => {
-    // 始终展示全量 subtype,跨 module 通用;后端会按 (module, subtype) 双键过滤
-    return facets.subtypes || [];
-  }, [facets.subtypes]);
+    if (!filters.module) return [];
+    return (facets.subtypes || []).map((facet) => {
+      const meta = subtypeDict.find(
+        (entry) => entry.code === facet.value && entry.module_code === filters.module,
+      );
+      return {
+        ...facet,
+        moduleLabel: filters.module,
+        subtypeLabel: meta?.display_name || facet.value.replaceAll("_", " "),
+      };
+    });
+  }, [facets.subtypes, filters.module, subtypeDict]);
 
   async function loadFacets() {
     try {
-      const data = await apiFetch("/api/bank/facets");
+      const query = buildQuery({ version: filters.version, module: filters.module });
+      const data = await apiFetch(`/api/bank/facets${query}`);
       setFacets(data);
     } catch (error) {
       onToast?.("error", "加载题库维度失败", error.message);
@@ -798,25 +824,34 @@ export default function BankPage({ apiFetch, systemPaths, onToast, canMutate = t
   }
 
   useEffect(() => {
-    loadFacets();
     loadModuleDict();
   }, []);
 
   async function loadModuleDict() {
     try {
-      const data = await apiFetch("/api/dict/modules?include_inactive=true");
-      const items = (data?.items || []).slice().sort((a, b) => {
+      const [moduleData, subtypeData] = await Promise.all([
+        apiFetch("/api/dict/modules?include_inactive=true"),
+        apiFetch("/api/dict/subtypes?include_inactive=true"),
+      ]);
+      const items = (moduleData?.items || []).slice().sort((a, b) => {
         const orderA = a.sort_order ?? 0;
         const orderB = b.sort_order ?? 0;
         if (orderA !== orderB) return orderA - orderB;
         return String(a.code).localeCompare(String(b.code));
       });
       setModuleDict(items);
+      setSubtypeDict(subtypeData?.items || []);
     } catch (err) {
       // 静默失败:继续用 fallback 列表
       setModuleDict([]);
+      setSubtypeDict([]);
     }
   }
+
+  useEffect(() => {
+    loadFacets();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.version, filters.module]);
 
   useEffect(() => {
     loadRows();
@@ -1031,8 +1066,8 @@ export default function BankPage({ apiFetch, systemPaths, onToast, canMutate = t
             策划、筛选与<em>归档</em>你的私有题库
           </h1>
           <div className="bank-subtitle">
-            每一道题都来自公开 benchmark 的私有化改写。在这里查看模块分布、
-            维护题面质量、把暂时不用的题目归档（retired），或彻底移除已经失效的旧题。
+            题库同时包含独立构建的私有纵向主轨与隔离的公开 benchmark 校准轨。在这里查看模块分布、
+            维护题面质量、管理 pilot/ready/retired 生命周期，并追溯每道题的来源与评分规则。
           </div>
         </div>
         <div className="bank-hero-stats">
@@ -1062,7 +1097,7 @@ export default function BankPage({ apiFetch, systemPaths, onToast, canMutate = t
             <button
               type="button"
               className={`bank-pill ${filters.version === "" ? "is-active" : ""}`}
-              onClick={() => { setFilters((prev) => ({ ...prev, version: "" })); setPage(1); }}
+              onClick={() => { setFilters((prev) => ({ ...prev, version: "", subtype: "" })); setPage(1); }}
             >
               全部版本
             </button>
@@ -1071,7 +1106,7 @@ export default function BankPage({ apiFetch, systemPaths, onToast, canMutate = t
                 key={v.value || "unknown"}
                 type="button"
                 className={`bank-pill ${filters.version === v.value ? "is-active" : ""}`}
-                onClick={() => { setFilters((prev) => ({ ...prev, version: v.value })); setPage(1); }}
+                onClick={() => { setFilters((prev) => ({ ...prev, version: v.value, subtype: "" })); setPage(1); }}
               >
                 {v.value || "未标注"}
                 <span className="pill-count">{v.count}</span>
@@ -1110,7 +1145,17 @@ export default function BankPage({ apiFetch, systemPaths, onToast, canMutate = t
             onChange={(event) => { setFilters((prev) => ({ ...prev, module: event.target.value, subtype: "" })); setPage(1); }}
           >
             <option value="">全部</option>
-            {(facets.modules || []).map((m) => <option key={m.value} value={m.value}>{m.value} ({m.count})</option>)}
+            {(moduleDict.length ? moduleDict : (facets.modules || [])).map((m) => {
+              const code = m.code || m.value;
+              const count = (facets.modules || []).find((entry) => entry.value === code)?.count;
+              const moduleLabel = m.display_name || code;
+              const title = m.description ? `${code} ${moduleLabel} — ${m.description}` : `${code} · ${moduleLabel}`;
+              return (
+                <option key={code} value={code} title={title}>
+                  {code} · {moduleLabel}{count !== undefined ? ` (${count})` : ""}
+                </option>
+              );
+            })}
           </select>
         </div>
 
@@ -1123,8 +1168,12 @@ export default function BankPage({ apiFetch, systemPaths, onToast, canMutate = t
             onChange={(event) => { setFilters((prev) => ({ ...prev, subtype: event.target.value })); setPage(1); }}
             disabled={!availableSubtypes.length}
           >
-            <option value="">全部</option>
-            {availableSubtypes.map((s) => <option key={s.value} value={s.value}>{s.value} ({s.count})</option>)}
+            <option value="">{filters.module ? "全部题型" : "请先选择模块"}</option>
+            {availableSubtypes.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.moduleLabel} · {s.subtypeLabel} ({s.count})
+              </option>
+            ))}
           </select>
         </div>
 

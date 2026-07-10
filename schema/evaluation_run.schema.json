@@ -82,7 +82,15 @@
       ]
     },
     "config": {
-      "type": "object"
+      "type": "object",
+      "properties": {
+        "bank_version": {
+          "type": "string"
+        },
+        "judge_connection_id": {
+          "type": ["string", "null"]
+        }
+      }
     },
     "progress": {
       "type": "object",

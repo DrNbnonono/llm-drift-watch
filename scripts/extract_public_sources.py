@@ -5,6 +5,7 @@ import csv
 import datetime as dt
 import hashlib
 import json
+import random
 import re
 import subprocess
 import sys
@@ -155,6 +156,19 @@ def iter_csv_rows(path: Path, row_limit: int | None = None):
             yield item
 
 
+def iter_jsonl_rows(path: Path, row_limit: int | None = None):
+    with path.open("r", encoding="utf-8") as f:
+        for idx, line in enumerate(f):
+            if row_limit is not None and idx >= row_limit:
+                break
+            line = line.strip()
+            if not line:
+                continue
+            item = json.loads(line)
+            item["_jsonl_row_idx"] = idx
+            yield item
+
+
 def extract_final_numeric_answer(answer_text: str | None) -> str | None:
     if not answer_text:
         return None
@@ -164,6 +178,25 @@ def extract_final_numeric_answer(answer_text: str | None) -> str | None:
     match = re.search(r"(-?\d[\d,]*(?:\.\d+)?)\s*$", answer_text.strip())
     if match:
         return match.group(1).replace(",", "")
+    return None
+
+
+def extract_last_boxed_answer(solution: str | None) -> str | None:
+    if not solution:
+        return None
+    marker_index = solution.rfind("\\boxed{")
+    if marker_index < 0:
+        return None
+    start = marker_index + len("\\boxed{")
+    depth = 1
+    for index in range(start, len(solution)):
+        char = solution[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return solution[start:index].strip()
     return None
 
 
@@ -351,6 +384,163 @@ def normalize_gsm8k(row: dict) -> dict:
         "direct_reuse_allowed": False,
         "rewrite_guidance": "Keep the arithmetic/combinatorial structure, but rewrite the scenario, values, distractor details, and output format into the project's private A1 template.",
         "notes": "Broad open math reasoning pool for A1; harder filtering is still needed before using items as C1-style boundary probes.",
+    }
+
+
+def stable_mcq(question: str, correct: str, incorrect: list[str]) -> tuple[list[str], str]:
+    """Return a reproducibly shuffled option list and its answer letter."""
+    options = [correct, *incorrect]
+    seed = int(hashlib.sha256(question.encode("utf-8")).hexdigest()[:16], 16)
+    random.Random(seed).shuffle(options)
+    answer_index = options.index(correct)
+    if answer_index >= 10:
+        raise ValueError("Multiple-choice normalizer supports at most 10 options")
+    return options, chr(ord("A") + answer_index)
+
+
+def normalize_gpqa_diamond(row: dict) -> dict:
+    question = str(row.get("Question") or "").strip()
+    correct = str(row.get("Correct Answer") or "").strip()
+    incorrect = [
+        str(row.get(f"Incorrect Answer {idx}") or "").strip()
+        for idx in range(1, 4)
+    ]
+    options, answer = stable_mcq(question, correct, incorrect)
+    original_id = hashlib.sha256(question.encode("utf-8")).hexdigest()[:16]
+    return {
+        "candidate_id": f"gpqa-diamond-{original_id}",
+        "source_name": "GPQA Diamond",
+        "source_dataset": "openai/simple-evals:gpqa_diamond",
+        "source_split": "diamond",
+        "source_url": "https://github.com/idavidrein/gpqa",
+        "original_id": original_id,
+        "module_candidates": ["A5"],
+        "task_family": "graduate_science_mcq",
+        "category": row.get("High-level domain") or row.get("Subdomain"),
+        "prompt": question,
+        "turns": None,
+        "options": options,
+        "answer": answer,
+        "scoring_method": "em",
+        "scoring_params": {
+            "answer_index": options.index(correct),
+            "option_count": len(options),
+        },
+        "anti_contamination_source": "Public benchmark; use only in the public calibration track.",
+        "source_metadata": {
+            "subdomain": row.get("Subdomain"),
+            "writer_accuracy": row.get("Writer's Difficulty Estimate"),
+            "non_expert_accuracy": row.get("Non-Expert Validator Accuracy"),
+            "expert_accuracy": row.get("Expert Validator Accuracy"),
+        },
+        "direct_reuse_allowed": True,
+        "rewrite_guidance": "Direct reuse is limited to the explicitly labelled public calibration track; private monitoring items must use a different knowledge point and fresh distractors.",
+        "notes": "Official GPQA Diamond item distributed through OpenAI simple-evals; deterministic option order is fixed by question hash.",
+    }
+
+
+def normalize_simpleqa(row: dict) -> dict:
+    question = str(row.get("problem") or row.get("question") or "").strip()
+    answer = str(row.get("answer") or row.get("target") or "").strip()
+    original_id = hashlib.sha256(question.encode("utf-8")).hexdigest()[:16]
+    return {
+        "candidate_id": f"simpleqa-{original_id}",
+        "source_name": "SimpleQA",
+        "source_dataset": "openai/simple-evals:simple_qa_test_set",
+        "source_split": "test",
+        "source_url": "https://github.com/openai/simple-evals",
+        "original_id": original_id,
+        "module_candidates": ["A5", "B4"],
+        "task_family": "short_form_factuality",
+        "category": row.get("topic") or "factuality",
+        "prompt": question,
+        "turns": None,
+        "options": None,
+        "answer": answer,
+        "scoring_method": "reference_match",
+        "scoring_params": {"accepted_answers": [answer]},
+        "anti_contamination_source": "Public benchmark; use only in the public calibration track.",
+        "source_metadata": {"metadata": row.get("metadata")},
+        "direct_reuse_allowed": True,
+        "rewrite_guidance": "Keep direct items in the public calibration track. For the private track, replace the fact, evidence source and answer aliases.",
+        "notes": "SimpleQA requires semantic grading in its official protocol; exact/reference matching is only suitable after manual alias review.",
+    }
+
+
+def normalize_math500(row: dict) -> dict:
+    question = str(row.get("Question") or row.get("problem") or "").strip()
+    reference_solution = str(row.get("Answer") or row.get("answer") or "").strip()
+    answer = extract_last_boxed_answer(reference_solution)
+    original_id = hashlib.sha256(question.encode("utf-8")).hexdigest()[:16]
+    return {
+        "candidate_id": f"math500-{original_id}",
+        "source_name": "MATH-500",
+        "source_dataset": "openai/simple-evals:math_500_test",
+        "source_split": "test",
+        "source_url": "https://github.com/hendrycks/math",
+        "original_id": original_id,
+        "module_candidates": ["A1", "C1"],
+        "task_family": "competition_math",
+        "category": row.get("Subject") or row.get("type") or "competition_math",
+        "prompt": question,
+        "turns": None,
+        "options": None,
+        "answer": answer,
+        "scoring_method": "math_equivalence",
+        "scoring_params": {
+            "reference_answer": answer,
+            "reference_solution": reference_solution,
+        },
+        "anti_contamination_source": "Public benchmark; use only in the public calibration track.",
+        "source_metadata": {
+            "level": row.get("Level") or row.get("level"),
+            "reference_solution": reference_solution,
+        },
+        "direct_reuse_allowed": True,
+        "rewrite_guidance": "Use direct items only for public calibration. Private probes must change the mathematical construction, not merely the constants.",
+        "notes": "Symbolic equivalence support is required before promotion from candidate to runnable pilot.",
+    }
+
+
+def normalize_supergpqa(row: dict) -> dict:
+    question = str(row.get("question") or "").strip()
+    correct = str(row.get("answer") or "").strip()
+    raw_options = [str(option).strip() for option in (row.get("options") or [])]
+    answer_letter = str(row.get("answer_letter") or "").strip().upper()
+    if answer_letter and answer_letter.isalpha():
+        answer = answer_letter
+        options = raw_options
+    else:
+        incorrect = [option for option in raw_options if option != correct]
+        options, answer = stable_mcq(question, correct, incorrect)
+    original_id = str(row.get("uuid") or hashlib.sha256(question.encode("utf-8")).hexdigest()[:16])
+    return {
+        "candidate_id": f"supergpqa-{original_id}",
+        "source_name": "SuperGPQA",
+        "source_dataset": "m-a-p/SuperGPQA",
+        "source_split": "train",
+        "source_url": "https://huggingface.co/datasets/m-a-p/SuperGPQA",
+        "original_id": original_id,
+        "module_candidates": ["A5"],
+        "task_family": "graduate_multidiscipline_mcq",
+        "category": row.get("discipline"),
+        "prompt": question,
+        "turns": None,
+        "options": options,
+        "answer": answer,
+        "scoring_method": "em",
+        "scoring_params": {"option_count": len(options)},
+        "anti_contamination_source": "Public composite benchmark; preserve original-source attribution and license constraints.",
+        "source_metadata": {
+            "discipline": row.get("discipline"),
+            "field": row.get("field"),
+            "subfield": row.get("subfield"),
+            "difficulty": row.get("difficulty"),
+            "is_calculation": row.get("is_calculation"),
+        },
+        "direct_reuse_allowed": True,
+        "rewrite_guidance": "Direct reuse is restricted to public calibration; private monitoring items must change the tested knowledge and distractor set.",
+        "notes": "ODC-BY composite dataset; downstream users must also respect licenses of referenced source datasets.",
     }
 
 
@@ -883,6 +1073,46 @@ SOURCE_SPECS = {
         "normalizer": normalize_gsm8k,
         "output_name": "gsm8k_candidates.jsonl",
     },
+    "gpqa_diamond": {
+        "dataset": "openai/simple-evals:gpqa_diamond",
+        "split": "diamond",
+        "row_iterator": lambda row_limit=None: iter_csv_rows(
+            ROOT / "raw_sources" / "simple-evals" / "gpqa_diamond.csv",
+            row_limit=row_limit,
+        ),
+        "normalizer": normalize_gpqa_diamond,
+        "output_name": "gpqa_diamond_candidates.jsonl",
+    },
+    "simpleqa": {
+        "dataset": "openai/simple-evals:simple_qa_test_set",
+        "split": "test",
+        "row_iterator": lambda row_limit=None: iter_csv_rows(
+            ROOT / "raw_sources" / "simple-evals" / "simple_qa_test_set.csv",
+            row_limit=row_limit,
+        ),
+        "normalizer": normalize_simpleqa,
+        "output_name": "simpleqa_candidates.jsonl",
+    },
+    "math500": {
+        "dataset": "openai/simple-evals:math_500_test",
+        "split": "test",
+        "row_iterator": lambda row_limit=None: iter_csv_rows(
+            ROOT / "raw_sources" / "simple-evals" / "math_500_test.csv",
+            row_limit=row_limit,
+        ),
+        "normalizer": normalize_math500,
+        "output_name": "math500_candidates.jsonl",
+    },
+    "supergpqa": {
+        "dataset": "m-a-p/SuperGPQA",
+        "split": "train",
+        "row_iterator": lambda row_limit=None: iter_jsonl_rows(
+            ROOT / "raw_sources" / "SuperGPQA-all.jsonl",
+            row_limit=row_limit,
+        ),
+        "normalizer": normalize_supergpqa,
+        "output_name": "supergpqa_candidates.jsonl",
+    },
     "sorrybench": {
         "dataset": "AIM-Harvard/sorrybench",
         "config": "default",
@@ -970,6 +1200,34 @@ def iter_source_rows(spec: dict, row_limit: int | None):
     )
 
 
+def rebuild_extraction_manifest(output_dir: Path) -> list[dict]:
+    """Describe every normalized root file, not only the sources from this invocation."""
+    manifest = []
+    for output_path in sorted(output_dir.glob("*.jsonl")):
+        count = 0
+        first_row = None
+        with output_path.open("r", encoding="utf-8") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                count += 1
+                if first_row is None:
+                    first_row = json.loads(line)
+        if first_row is None:
+            continue
+        stem = output_path.stem.removesuffix("_candidates")
+        manifest.append(
+            {
+                "source_key": stem,
+                "dataset": first_row.get("source_dataset"),
+                "split": first_row.get("source_split"),
+                "output_file": str(output_path),
+                "count": count,
+            }
+        )
+    return manifest
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -1020,6 +1278,7 @@ def main():
         )
         print(f"[ok] {source_key}: {count} rows -> {output_path}")
 
+    manifest = rebuild_extraction_manifest(output_dir)
     summary_path = output_dir / "extraction_summary.json"
     temp_summary_path = summary_path.with_suffix(summary_path.suffix + ".tmp")
     temp_summary_path.write_text(

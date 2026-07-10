@@ -108,6 +108,16 @@
     "scoring_params": {
       "type": "object"
     },
+    "review_policy": {
+      "type": ["object", "null"],
+      "properties": {
+        "mode": {"type": "string", "enum": ["deterministic", "judge"]},
+        "rubric": {"type": ["string", "object", "array", "null"]},
+        "confidence_threshold": {"type": "number", "minimum": 0, "maximum": 1},
+        "manual_review_rules": {"type": ["object", "array", "null"]}
+      },
+      "required": ["mode"]
+    },
     "module_quota_tag": {
       "type": [
         "string",
