@@ -1,5 +1,6 @@
 # Runtime outputs
 manifests/evaluation_runs/
+manifests/evaluation_batches/
 manifests/evaluation_reports/
 manifests/evaluation.sqlite
 manifests\evaluation_reports
@@ -33,6 +34,8 @@ build/
 # Frontend dependencies and builds
 frontend/node_modules/
 frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
 
 # pnpm
 .pnpm-store/

@@ -112,6 +112,14 @@
       "type": "boolean"
     },
     "response": {},
+    "token_usage": {
+      "type": ["object", "null"],
+      "additionalProperties": true
+    },
+    "estimated_cost": {
+      "type": ["object", "null"],
+      "additionalProperties": true
+    },
     "score_details": {
       "type": "object"
     },

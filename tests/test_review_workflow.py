@@ -4,6 +4,8 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -64,6 +66,18 @@ class ReviewWorkflowTests(unittest.TestCase):
         self.assertEqual(reviewed["score_source"], "manual")
         self.assertEqual(reviewed["review_status"], "reviewed")
 
+    def test_manual_review_requires_note_and_uses_exact_verdict_thresholds(self):
+        with self.assertRaisesRegex(ValueError, "note is required"):
+            self.service.submit_manual_review("run-1", "B1-001", {"reviewer": "Alice", "score": 1, "note": ""})
+        partial = self.service.submit_manual_review(
+            "run-1", "B1-001", {"reviewer": "Alice", "score": 0.8, "note": "部分满足评分约束"}
+        )
+        self.assertEqual(partial["review"]["verdict"], "partial")
+        passed = self.service.submit_manual_review(
+            "run-1", "B1-001", {"reviewer": "Alice", "score": 1, "note": "答案完全正确"}
+        )
+        self.assertEqual(passed["review"]["verdict"], "pass")
+
     def test_pending_review_is_excluded_from_aggregate(self):
         summary = aggregate_scores([
             {"module": "B1", "status": "ok", "primary_score": 0.0, "effective_score": 0.0, "review_status": "pending"},
@@ -78,6 +92,45 @@ class ReviewWorkflowTests(unittest.TestCase):
         loaded = self.store.get_review_thread(thread["thread_id"])
         self.assertEqual([row["role"] for row in loaded["messages"]], ["user", "assistant"])
         self.assertEqual(self.store.list_run_items("run-1")[0]["response"]["text"], "answer")
+
+    def test_judge_has_enough_output_budget_for_complete_json(self):
+        class JudgeProvider:
+            model = SimpleNamespace(model_alias="judge-model")
+
+            def __init__(self):
+                self.max_tokens = None
+
+            def complete_messages(self, messages, max_tokens):
+                self.max_tokens = max_tokens
+                return {"content": [{"type": "text", "text": '{"score":0.8,"verdict":"pass","criteria":[],"rationale":"ok","confidence":0.9}'}]}
+
+            @staticmethod
+            def extract_text(raw):
+                return raw["content"][0]["text"]
+
+            @staticmethod
+            def sanitize_response(raw):
+                return {"text": raw["content"][0]["text"]}
+
+        judge = JudgeProvider()
+        self.service.registry = SimpleNamespace(resolve_connection=lambda connection_id: judge)
+
+        result = self.service.judge_run_item("run-1", "B1-001", attempt_run_id="run-1", judge_connection_id="judge-connection")
+
+        self.assertEqual(result["status"], "ok")
+        self.assertGreaterEqual(judge.max_tokens, 1400)
+
+    def test_retry_inherits_judge_connection(self):
+        self.service.get_run = lambda run_id: {
+            "provider_id": "answer", "model_alias": "answer-model", "connection_id": "answer-connection",
+            "bank_version": "QB-v1.3", "config": {"modules": None, "timeout": 60, "limit_per_module": 1, "judge_connection_id": "judge-connection"},
+        }
+        self.service.get_items = lambda run_id, status=None: {"items": [{"question_id": "B1-001"}]}
+        self.service.create_run = Mock(return_value={"run_id": "retry-1"})
+
+        self.service.retry_failed_items("run-1", concurrency_limit=2)
+
+        self.assertEqual(self.service.create_run.call_args.kwargs["judge_connection_id"], "judge-connection")
 
 
 if __name__ == "__main__":

@@ -59,7 +59,7 @@ class ManualReviewRequest(BaseModel):
     reviewer: str
     score: float = Field(ge=0, le=1)
     verdict: str | None = None
-    note: str = ""
+    note: str = Field(min_length=1)
     confirmed: bool = True
     needs_review: bool = False
 
@@ -110,6 +110,15 @@ class ModelUpsertRequest(BaseModel):
     enabled: bool = True
 
 
+class PricingRequest(BaseModel):
+    currency: str = "USD"
+    input_per_million: float | None = Field(default=None, ge=0)
+    cached_input_per_million: float | None = Field(default=None, ge=0)
+    cache_creation_per_million: float | None = Field(default=None, ge=0)
+    output_per_million: float | None = Field(default=None, ge=0)
+    reasoning_per_million: float | None = Field(default=None, ge=0)
+
+
 class ModelConnectionUpsertRequest(BaseModel):
     connection_id: str | None = None
     vendor_name: str
@@ -129,7 +138,22 @@ class ModelConnectionUpsertRequest(BaseModel):
     headers_template: dict[str, str] = Field(default_factory=dict)
     model_lookup_mode: str = "skip"
     advanced: dict[str, Any] = Field(default_factory=dict)
+    pricing: PricingRequest | None = None
     keep_existing_secret: bool = True
+
+
+class EvaluationBatchCreateRequest(BaseModel):
+    model_connection_ids: list[str] = Field(min_length=2)
+    modules: list[str] | None = None
+    smoke: bool = False
+    timeout: int | None = None
+    max_items: int | None = None
+    limit_per_module: int = 1
+    concurrency_limit: int = Field(default=2, ge=1, le=4)
+    max_active_models: int = Field(default=2, ge=1, le=8)
+    question_ids: list[str] | None = None
+    bank_version: str | None = None
+    judge_connection_id: str | None = None
 
 
 @app.get("/api/health")
@@ -207,7 +231,11 @@ def list_model_connections() -> dict[str, Any]:
 @app.post("/api/model-connections")
 def create_model_connection(payload: ModelConnectionUpsertRequest) -> dict[str, Any]:
     try:
-        return service.registry.create_model_connection(payload.model_dump(exclude_none=True))
+        data = payload.model_dump(exclude_none=True)
+        pricing = data.pop("pricing", None)
+        if pricing is not None:
+            data.setdefault("advanced", {})["pricing"] = pricing
+        return service.registry.create_model_connection(data)
     except ProviderError as exc:  # noqa: BLE001
         raise _provider_error_to_http(exc) from exc
     except Exception as exc:  # noqa: BLE001
@@ -219,6 +247,9 @@ def update_model_connection(connection_id: str, payload: ModelConnectionUpsertRe
     try:
         data = payload.model_dump(exclude_none=True)
         data.pop("connection_id", None)
+        pricing = data.pop("pricing", None)
+        if pricing is not None:
+            data.setdefault("advanced", {})["pricing"] = pricing
         return service.registry.update_model_connection(connection_id, data)
     except ProviderError as exc:  # noqa: BLE001
         raise _provider_error_to_http(exc) from exc
@@ -329,6 +360,52 @@ def create_run(payload: RunCreateRequest) -> dict[str, Any]:
 @app.get("/api/runs")
 def list_runs() -> dict[str, Any]:
     return {"runs": service.list_runs()}
+
+
+@app.get("/api/runs/{run_id}/progress-grid")
+def run_progress_grid(run_id: str) -> dict[str, Any]:
+    try:
+        return service.get_run_progress_grid(run_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="run not found") from exc
+
+
+@app.post("/api/evaluation-batches")
+def create_evaluation_batch(payload: EvaluationBatchCreateRequest) -> dict[str, Any]:
+    try:
+        return service.create_evaluation_batch(**payload.model_dump())
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/evaluation-batches")
+def list_evaluation_batches() -> dict[str, Any]:
+    batches = service.list_evaluation_batches()
+    return {"batches": batches, "total": len(batches)}
+
+
+@app.get("/api/evaluation-batches/{batch_id}")
+def get_evaluation_batch(batch_id: str) -> dict[str, Any]:
+    try:
+        return service.get_evaluation_batch(batch_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="batch not found") from exc
+
+
+@app.get("/api/evaluation-batches/{batch_id}/progress-grid")
+def batch_progress_grid(batch_id: str) -> dict[str, Any]:
+    try:
+        return service.get_batch_progress_grid(batch_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="batch not found") from exc
+
+
+@app.post("/api/evaluation-batches/{batch_id}/report")
+def create_batch_report(batch_id: str) -> dict[str, Any]:
+    try:
+        return service.generate_batch_report(batch_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="batch not found") from exc
 
 
 @app.get("/api/runs/{run_id}")

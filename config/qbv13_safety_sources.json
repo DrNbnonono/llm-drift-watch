@@ -1,0 +1,76 @@
+{
+  "sources": [
+    {
+      "id": "xstest",
+      "dataset": "paul-rottger/xstest",
+      "url": "https://raw.githubusercontent.com/paul-rottger/xstest/d7bb5bd738c1fcbc36edd83d5e7d1b71a3e2d84d/xstest_prompts.csv",
+      "revision": "d7bb5bd738c1fcbc36edd83d5e7d1b71a3e2d84d",
+      "license": "CC-BY-4.0",
+      "modules": ["B3"],
+      "enabled": true
+    },
+    {
+      "id": "harmbench_behaviors",
+      "dataset": "centerforaisafety/HarmBench",
+      "url": "https://raw.githubusercontent.com/centerforaisafety/HarmBench/8e1604d1171fe8a48d8febecd22f600e462bdcdd/data/behavior_datasets/harmbench_behaviors_text_all.csv",
+      "revision": "8e1604d1171fe8a48d8febecd22f600e462bdcdd",
+      "license": "MIT",
+      "modules": ["B1"],
+      "enabled": true
+    },
+    {
+      "id": "jbb_harmful",
+      "dataset": "JailbreakBench/JBB-Behaviors",
+      "url": "https://huggingface.co/datasets/JailbreakBench/JBB-Behaviors/resolve/886acc352a31533ffbcf4ef22c744658688086fc/data/harmful-behaviors.csv",
+      "revision": "886acc352a31533ffbcf4ef22c744658688086fc",
+      "license": "MIT",
+      "modules": ["B1", "B2"],
+      "enabled": true
+    },
+    {
+      "id": "jbb_benign",
+      "dataset": "JailbreakBench/JBB-Behaviors",
+      "url": "https://huggingface.co/datasets/JailbreakBench/JBB-Behaviors/resolve/886acc352a31533ffbcf4ef22c744658688086fc/data/benign-behaviors.csv",
+      "revision": "886acc352a31533ffbcf4ef22c744658688086fc",
+      "license": "MIT",
+      "modules": ["B3"],
+      "enabled": true
+    },
+    {
+      "id": "agentdojo_banking_injections",
+      "dataset": "ethz-spylab/agentdojo",
+      "url": "https://raw.githubusercontent.com/ethz-spylab/agentdojo/a75aba7631d3ca5fb7ab938965c97ead2f9ff84b/src/agentdojo/default_suites/v1/banking/injection_tasks.py",
+      "revision": "v0.1.35+a75aba7631d3ca5fb7ab938965c97ead2f9ff84b",
+      "license": "MIT",
+      "modules": ["B5", "B8"],
+      "enabled": true
+    },
+    {
+      "id": "agentdojo_slack_injections",
+      "dataset": "ethz-spylab/agentdojo",
+      "url": "https://raw.githubusercontent.com/ethz-spylab/agentdojo/a75aba7631d3ca5fb7ab938965c97ead2f9ff84b/src/agentdojo/default_suites/v1/slack/injection_tasks.py",
+      "revision": "v0.1.35+a75aba7631d3ca5fb7ab938965c97ead2f9ff84b",
+      "license": "MIT",
+      "modules": ["B5", "B8"],
+      "enabled": true
+    },
+    {
+      "id": "agentdojo_travel_injections",
+      "dataset": "ethz-spylab/agentdojo",
+      "url": "https://raw.githubusercontent.com/ethz-spylab/agentdojo/a75aba7631d3ca5fb7ab938965c97ead2f9ff84b/src/agentdojo/default_suites/v1/travel/injection_tasks.py",
+      "revision": "v0.1.35+a75aba7631d3ca5fb7ab938965c97ead2f9ff84b",
+      "license": "MIT",
+      "modules": ["B5", "B8"],
+      "enabled": true
+    },
+    {
+      "id": "agentdojo_workspace_injections",
+      "dataset": "ethz-spylab/agentdojo",
+      "url": "https://raw.githubusercontent.com/ethz-spylab/agentdojo/a75aba7631d3ca5fb7ab938965c97ead2f9ff84b/src/agentdojo/default_suites/v1/workspace/injection_tasks.py",
+      "revision": "v0.1.35+a75aba7631d3ca5fb7ab938965c97ead2f9ff84b",
+      "license": "MIT",
+      "modules": ["B5", "B8"],
+      "enabled": true
+    }
+  ]
+}

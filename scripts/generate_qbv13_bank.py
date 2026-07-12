@@ -8,6 +8,7 @@ from collections import Counter, defaultdict
 from copy import deepcopy
 
 from generate_formal_bank import MODULE_TARGETS, generate_bank
+from build_qbv13_safety_expansion import AUDIT_PATH, build_safety_expansion
 from qbv13_replacement_builders import BUILDERS, VERSION
 from question_bank_runtime import FINAL_BANK, MANIFESTS, REWRITE_DRAFTS, load_jsonl, write_jsonl
 
@@ -57,11 +58,20 @@ def build_qbv13() -> tuple[list[dict], list[dict], dict]:
         rewrite = next(row for row in base_rewrites if row["rewrite_id"] == rewrite_id)
         final_rewrites.append(rewrite)
 
-    module_counts = Counter(item["module"] for item in final_items)
+    base_module_counts = Counter(item["module"] for item in final_items)
     if len(final_items) != sum(MODULE_TARGETS.values()):
         raise ValueError(f"QB-v1.3 item count mismatch: {len(final_items)}")
-    if module_counts != Counter(MODULE_TARGETS):
-        raise ValueError(f"QB-v1.3 module counts mismatch: {module_counts}")
+    if base_module_counts != Counter(MODULE_TARGETS):
+        raise ValueError(f"QB-v1.3 base module counts mismatch: {base_module_counts}")
+
+    expansion_items, expansion_rewrites, expansion_audit = build_safety_expansion(final_items)
+    final_items.extend(expansion_items)
+    final_rewrites.extend(expansion_rewrites)
+    expected_targets = dict(MODULE_TARGETS)
+    expected_targets.update({f"B{i}": 100 for i in range(1, 9)})
+    module_counts = Counter(item["module"] for item in final_items)
+    if module_counts != Counter(expected_targets):
+        raise ValueError(f"QB-v1.3 expanded module counts mismatch: {module_counts}")
     if len({item["question_id"] for item in final_items}) != len(final_items):
         raise ValueError("QB-v1.3 contains duplicate question IDs")
 
@@ -70,12 +80,17 @@ def build_qbv13() -> tuple[list[dict], list[dict], dict]:
         "main_item_count": len(final_items),
         "rewrite_count": len(final_rewrites),
         "replacement_count": len(replacement_items),
-        "carried_forward_count": len(final_items) - len(replacement_items),
+        "carried_forward_count": sum(MODULE_TARGETS.values()) - len(replacement_items),
+        "safety_expansion_count": len(expansion_items),
+        "safety_source_counts": expansion_audit["source_counts"],
+        "safety_language_counts": expansion_audit["language_counts"],
+        "safety_audit_path": str(AUDIT_PATH),
         "module_counts": dict(module_counts),
         "single_turn_count": sum(item["item_format"] == "single_turn" for item in final_items),
         "multi_turn_group_count": sum(item["item_format"] == "multi_turn_group" for item in final_items),
         "qa_status_counts": dict(Counter(item["qa_status"] for item in final_items)),
         "scoring_method_counts": dict(Counter(item["scoring_method"] for item in final_items)),
+        "_safety_audit": expansion_audit,
     }
     return final_rewrites, final_items, summary
 
@@ -85,6 +100,7 @@ def main() -> None:
     parser.add_argument("--write", action="store_true")
     args = parser.parse_args()
     rewrites, items, summary = build_qbv13()
+    safety_audit = summary.pop("_safety_audit")
     if not args.write:
         print(json.dumps(summary, ensure_ascii=False, indent=2))
         return
@@ -95,6 +111,7 @@ def main() -> None:
     rewrite_snapshot = rewrite_generated / "rewrite_drafts_qbv1_3.jsonl"
     write_jsonl(main_snapshot, items)
     write_jsonl(rewrite_snapshot, rewrites)
+    AUDIT_PATH.write_text(json.dumps(safety_audit, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     pilot_items_path = final_generated / "final_bank_items_qbv1_3_pilot.jsonl"
     pilot_rewrites_path = rewrite_generated / "rewrite_drafts_qbv1_3_pilot.jsonl"

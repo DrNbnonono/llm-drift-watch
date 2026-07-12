@@ -25,7 +25,7 @@ question_bank_workspace/
 ├── docs/                        # 设计文档与蓝图
 ├── final_bank_specs/
 │   └── generated/
-│       └── final_bank_items.jsonl  # 627 题 QB-v1.3 主轨 + public pilot/local draft
+│       └── final_bank_items.jsonl  # 1110 题 QB-v1.3 正式主轨 + public pilot/local draft
 ├── frontend/                    # React + Vite 前端
 │   ├── src/
 │   │   ├── App.jsx              # 主应用组件（含页面路由）
@@ -61,6 +61,7 @@ question_bank_workspace/
 │   ├── build_curated_candidates.py # 候选题构建
 │   └── validate_bank_artifacts.py # 产物校验
 ├── tests/                       # 单元测试
+├── requirements.txt            # 后端 Python 依赖
 ├── .env.example                 # 环境变量模板
 ├── start_eval_system.sh         # 一键启动脚本（WSL）
 ├── AGENTS.md                    # 开发接手文档
@@ -77,15 +78,11 @@ question_bank_workspace/
 | A4 | 30 | 阅读理解 |
 | A5 | 30 | 知识问答 |
 | A6 | 50 | 逻辑推理 |
-| B1 | 40 | 直接危险请求拒答基线 |
-| B2 | 41 | 现代 jailbreak 抵抗 |
-| B3 | 40 | 合法边界 / 过度拒答 |
-| B4 | 30 | 错误前提 / 事实与引用核验 |
-| B5-B8 | 166 | 间接注入、多轮升级、伪合规、代理型误用 |
+| B1-B8 | 800 | 危险请求、越狱、过度拒答、注入、多轮升级与代理型误用 |
 | C1-C4 | 50 | 复合能力探针 |
-| **合计** | **627** | 单轮 529 + 多轮组 98 |
+| **合计** | **1110** | 18 个模块的正式 ready/frozen 主轨 |
 
-在 QB-v1.2 近重复审计中标记的 170 道同构题，已在 QB-v1.3 全部替换为不同任务结构。当前主轨 627 道全部为 `ready`，相似度 0.88 门禁结果为 0 个近重复对。另有 30 道 GPQA Diamond 公开校准题保持 `pilot`，只有显式传入 `question_ids` 才会执行。
+在 QB-v1.2 近重复审计中标记的 170 道同构题，已在 QB-v1.3 全部替换为不同任务结构。当前正式主轨共 1110 道 `ready/frozen` 题，覆盖 18 个模块；另有 30 道 GPQA Diamond 公开校准题保持 `pilot`，只有显式传入 `question_ids` 才会执行。
 
 ### QB-v1.3 重建重点
 
@@ -187,6 +184,93 @@ cd "LLM Evaluation/question_bank_workspace"
 
 此脚本会自动加载 `.env`、启动后端和前端。
 
+## Linux 服务器部署
+
+以下示例适用于 Ubuntu 22.04/24.04。生产环境建议由 Uvicorn 仅监听本机端口，Nginx 对外提供前端静态文件并反向代理 `/api/`。
+
+### 1. 克隆与安装
+
+```bash
+git clone https://github.com/DrNbnonono/llm-drift-watch.git
+cd llm-drift-watch
+
+python3 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+
+cd frontend
+npm ci
+VITE_API_BASE="" npm run build
+cd ..
+```
+
+`VITE_API_BASE=""` 表示前端使用同域 `/api`。如前后端使用不同域名，请在构建时设置完整后端地址。
+
+### 2. 配置密钥
+
+```bash
+cp .env.example .env
+python3 -c 'import secrets; print(secrets.token_urlsafe(48))'
+chmod 600 .env
+```
+
+将生成值写入 `.env` 的 `QUESTION_BANK_SECRET_KEY`。Provider Key 可写入服务器环境变量，或在前端“模型接入”中录入后加密保存。不要提交 `.env`、`manifests/evaluation.sqlite` 或评测产物。
+
+### 3. systemd 后端服务
+
+创建 `/etc/systemd/system/llm-drift-watch.service`：
+
+```ini
+[Unit]
+Description=LLM Drift Watch API
+After=network-online.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/llm-drift-watch
+EnvironmentFile=/opt/llm-drift-watch/.env
+ExecStart=/opt/llm-drift-watch/.venv/bin/python scripts/run_evaluation_api.py --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now llm-drift-watch
+curl http://127.0.0.1:8000/api/health
+```
+
+确保 `/opt/llm-drift-watch/manifests` 对运行用户可写；SQLite 数据库、Run、批次及报告会写入该目录。
+
+### 4. Nginx
+
+```nginx
+server {
+    listen 80;
+    server_name evaluation.example.com;
+    root /opt/llm-drift-watch/frontend/dist;
+    index index.html;
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
+```
+
+部署后依次检查：`/api/health`、模型接入连通性、Smoke Run、实时红绿灯、逐题详情、人工复核、历史 Runs 和报告深链接。
+
 ## 多模型评测系统
 
 ### 运行架构
@@ -203,6 +287,8 @@ SQLite 表结构：
 | `runs` | 评测运行记录 |
 | `run_items` | 逐题评分结果 |
 | `bank_items` | 正式题库索引（从 JSONL 导入） |
+| `evaluation_batches` | 多模型评测批次 |
+| `evaluation_batch_runs` | 批次与各模型子 Run 的关联 |
 
 每次评测还会写文件镜像到 `manifests/evaluation_runs/<run_id>/`，便于追溯与人工检查：
 
@@ -243,6 +329,11 @@ SQLite 表结构：
 | GET | `/api/runs/{id}/timeline/{qid}` | 获取单题多轮时间线 |
 | POST | `/api/runs/{id}/report` | 生成 Markdown 报告 |
 | GET | `/api/reports/{id}` | 获取报告内容 |
+| POST | `/api/evaluation-batches` | 创建多模型评测批次 |
+| GET | `/api/evaluation-batches` | 获取批次历史 |
+| GET | `/api/evaluation-batches/{id}` | 获取批次详情与汇总 |
+| GET | `/api/evaluation-batches/{id}/progress-grid` | 获取紧凑红绿灯矩阵 |
+| POST | `/api/evaluation-batches/{id}/report` | 生成横向对比报告 |
 | GET | `/api/bank/items` | 浏览题库（分页/筛选） |
 | GET | `/api/bank/facets` | 题库 facet 统计 |
 | GET | `/api/bank/items/{qid}` | 获取单题详情 |
@@ -257,14 +348,14 @@ SQLite 表结构：
 
 | 页面 | 功能 |
 |------|------|
-| 运行创建 | 选择模型接入实例，配置模块/题目范围，发起评测 |
-| 实时监控 | 实时展示 Processed / Succeeded / Failed 进度与分数 |
-| 逐题结果 | 按模块/状态筛选，查看每题评分详情 |
+| 运行创建 | 选择一个或多个模型，配置共享 Judge、模块/题目范围与并发，发起 Run 或批次 |
+| 实时监控 | 模型 × 模块 × 题目的红绿灯矩阵，展示进度、得分、Token 与估算费用 |
+| 逐题结果 | 深链接查看题目、模型思考过程、最终回答、评分依据和人工复核历史 |
 | 多轮时间线 | 展示单题在 root + retry run 中的多次调用历史 |
 | 题库管理 | 浏览正式题库，支持模块/子类型/关键词筛选，以及新增、修改、删除、归档、恢复 |
 | 模型接入 | 可视化管理 Provider / Model / 接入实例 |
-| 历史 Runs | 查看所有 run，支持删除（同步清理 SQLite + 文件） |
-| 报告 | 图表化仪表盘 + Markdown 原文展示 |
+| 历史 Runs | 筛选、分页查看 Run 与批次，进入逐题结果或报告，支持删除 |
+| 报告 | 独立表格列表与全宽详情页，支持 Hash 深链接、图表和 Markdown 原文 |
 
 ### 题库管理说明
 

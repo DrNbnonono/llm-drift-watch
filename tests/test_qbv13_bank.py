@@ -102,9 +102,10 @@ class QBV13BankTests(unittest.TestCase):
         cls.rewrites, cls.items, cls.summary = build_qbv13()
 
     def test_production_counts_and_status(self):
-        self.assertEqual(len(self.items), 627)
-        self.assertEqual(len(self.rewrites), 627)
+        self.assertEqual(len(self.items), 1110)
+        self.assertEqual(len(self.rewrites), 1110)
         self.assertEqual(self.summary["replacement_count"], 198)
+        self.assertEqual(self.summary["safety_expansion_count"], 483)
         self.assertTrue(all(item["version"] == "QB-v1.3" for item in self.items))
         self.assertTrue(all(item["qa_status"] == "ready" for item in self.items))
 
@@ -144,10 +145,10 @@ class QBV13BankTests(unittest.TestCase):
         b5_items = [item for item in self.items if item["module"] == "B5"]
         prompts = [item.get("prompt_template") for item in b5_items]
 
-        self.assertEqual(len(b5_items), 40)
+        self.assertEqual(len(b5_items), 100)
         self.assertTrue(all(item["scoring_method"] == "injection_resilience" for item in b5_items))
-        self.assertEqual(len({item["subtype"] for item in b5_items}), 40)
-        self.assertEqual(len(set(prompts)), 40)
+        self.assertGreaterEqual(len({item["subtype"] for item in b5_items}), 50)
+        self.assertEqual(len(set(prompts)), 100)
         self.assertTrue(all(item["scoring_params"].get("required_terms") for item in b5_items))
         self.assertTrue(all(item["scoring_params"].get("forbidden_terms") for item in b5_items))
 

@@ -17,7 +17,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
-from provider_runtime import ProviderError, ProviderRegistry, classify_error_message
+from provider_runtime import ProviderError, ProviderRegistry, classify_error_message, normalize_billing_usage
 from question_bank_runtime import (
     FINAL_BANK,
     MANIFESTS,
@@ -46,6 +46,7 @@ from sqlite_runtime import CURRENT_BANK_VERSION, EDITABLE_BANK_VERSIONS, SQLiteS
 
 
 RUNS_DIR = MANIFESTS / "evaluation_runs"
+BATCHES_DIR = MANIFESTS / "evaluation_batches"
 LEGACY_PROVIDER_MAP = {
     "https://api.minimaxi.com/anthropic/v1": "minimax_anthropic",
 }
@@ -60,6 +61,116 @@ def utc_now() -> str:
 
 def make_run_id() -> str:
     return dt.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:8]
+
+
+def make_batch_id() -> str:
+    return "batch-" + dt.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:8]
+
+
+TOKEN_KEYS = ("input_tokens", "cached_input_tokens", "cache_creation_tokens", "output_tokens", "reasoning_tokens")
+
+
+def calculate_estimated_cost(usage: dict[str, Any], pricing: dict[str, Any] | None) -> dict[str, Any]:
+    pricing = pricing or {}
+    required = {
+        "input_tokens": "input_per_million",
+        "cached_input_tokens": "cached_input_per_million",
+        "cache_creation_tokens": "cache_creation_per_million",
+        "output_tokens": "output_per_million",
+        "reasoning_tokens": "reasoning_per_million",
+    }
+    used_categories = {key for key in TOKEN_KEYS if int(usage.get(key) or 0) > 0}
+    if not used_categories or any(pricing.get(required[key]) is None for key in used_categories):
+        return {"amount": None, "currency": pricing.get("currency", "USD"), "complete": False, "estimated": True}
+    standard_output = max(0, int(usage.get("output_tokens") or 0) - int(usage.get("reasoning_tokens") or 0))
+    counts = dict(usage)
+    counts["output_tokens"] = standard_output
+    amount = sum(int(counts.get(key) or 0) * float(pricing.get(price_key) or 0) for key, price_key in required.items()) / 1_000_000
+    return {"amount": round(amount, 10), "currency": pricing.get("currency", "USD"), "complete": bool(usage.get("usage_complete", False)), "estimated": True}
+
+
+def _response_billing_segments(response: dict[str, Any]) -> list[dict[str, Any]]:
+    if response.get("turn_results"):
+        return response["turn_results"]
+    if response.get("scenario_results"):
+        return [row for rows in response["scenario_results"].values() for row in rows]
+    return [response]
+
+
+def summarize_item_billing(response: dict[str, Any], pricing: dict[str, Any] | None) -> dict[str, Any]:
+    total = {key: 0 for key in TOKEN_KEYS}
+    complete = True
+    for segment in _response_billing_segments(response or {}):
+        usage = segment.get("billing_usage") or (segment.get("raw") or {}).get("billing_usage")
+        if not usage:
+            complete = False
+            continue
+        for key in TOKEN_KEYS:
+            total[key] += int(usage.get(key) or 0)
+        complete = complete and bool(usage.get("usage_complete"))
+    total["total_tokens"] = total["input_tokens"] + total["cached_input_tokens"] + total["cache_creation_tokens"] + total["output_tokens"]
+    total["usage_complete"] = complete
+    return {"token_usage": total, "estimated_cost": calculate_estimated_cost(total, pricing)}
+
+
+def classify_grid_state(item: dict[str, Any] | None) -> str:
+    if item is None:
+        return "unprocessed"
+    if item.get("status") == "failed":
+        return "failed"
+    score = item.get("effective_score")
+    if score is None:
+        return "pending_score"
+    return "correct" if float(score) == 1.0 else "incorrect"
+
+
+def summarize_billing_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    usage = {key: 0 for key in TOKEN_KEYS}
+    usage_complete = True
+    amounts: list[float] = []
+    currency = "USD"
+    cost_complete = True
+    for row in rows:
+        row_usage = row.get("token_usage")
+        if not row_usage:
+            usage_complete = False
+        else:
+            for key in TOKEN_KEYS:
+                usage[key] += int(row_usage.get(key) or 0)
+            usage_complete = usage_complete and bool(row_usage.get("usage_complete"))
+        cost = row.get("estimated_cost")
+        if not cost or cost.get("amount") is None:
+            cost_complete = False
+        else:
+            amounts.append(float(cost["amount"]))
+            currency = cost.get("currency", currency)
+            cost_complete = cost_complete and bool(cost.get("complete"))
+    usage["total_tokens"] = usage["input_tokens"] + usage["cached_input_tokens"] + usage["cache_creation_tokens"] + usage["output_tokens"]
+    usage["usage_complete"] = usage_complete
+    return {
+        "token_usage": usage,
+        "estimated_cost": {"amount": round(sum(amounts), 10) if cost_complete else None, "known_amount": round(sum(amounts), 10), "currency": currency, "complete": cost_complete, "estimated": True},
+    }
+
+
+def combine_billing_summaries(summaries: list[dict[str, Any]]) -> dict[str, Any]:
+    usage = {key: 0 for key in TOKEN_KEYS}
+    usage_complete = True
+    known_amount = 0.0
+    cost_complete = True
+    currency = "USD"
+    for summary in summaries:
+        row_usage = summary.get("token_usage") or {}
+        for key in TOKEN_KEYS:
+            usage[key] += int(row_usage.get(key) or 0)
+        usage_complete = usage_complete and bool(row_usage.get("usage_complete"))
+        cost = summary.get("estimated_cost") or {}
+        known_amount += float(cost.get("known_amount", cost.get("amount") or 0) or 0)
+        cost_complete = cost_complete and cost.get("amount") is not None and bool(cost.get("complete"))
+        currency = cost.get("currency", currency)
+    usage["total_tokens"] = usage["input_tokens"] + usage["cached_input_tokens"] + usage["cache_creation_tokens"] + usage["output_tokens"]
+    usage["usage_complete"] = usage_complete
+    return {"token_usage": usage, "estimated_cost": {"amount": round(known_amount, 10) if cost_complete else None, "known_amount": round(known_amount, 10), "currency": currency, "complete": cost_complete, "estimated": True}}
 
 
 def load_bank_items() -> list[dict[str, Any]]:
@@ -153,11 +264,25 @@ def extract_canonical_answer(text: str, answers: list[str]) -> str:
     return canonical_answer if best_score >= 0.85 else ""
 
 
+def _response_record(text: str, sanitized: dict[str, Any]) -> dict[str, Any]:
+    """Keep the legacy raw snapshot while promoting normalized response fields."""
+    promoted = {
+        key: sanitized.get(key)
+        for key in (
+            "reasoning", "content_blocks", "reasoning_available", "reasoning_truncated",
+            "reasoning_original_chars", "usage", "stop_reason", "finish_reason", "model_name", "id",
+            "billing_usage",
+        )
+        if key in sanitized
+    }
+    return {"text": text, **promoted, "raw": sanitized}
+
+
 def run_item(provider, item: dict[str, Any], max_tokens: int) -> dict[str, Any]:
     max_tokens = resolve_item_max_tokens(item, max_tokens)
     if item["item_format"] == "single_turn":
         text, raw = single_turn_response(provider, item["prompt_template"], max_tokens=max_tokens)
-        return {"mode": "single_turn", "text": text, "raw": raw}
+        return {"mode": "single_turn", **_response_record(text, raw)}
 
     mode = item["scoring_params"].get("session_mode", "single_conversation")
     turns = item.get("turn_script") or []
@@ -175,8 +300,7 @@ def run_item(provider, item: dict[str, Any], max_tokens: int) -> dict[str, Any]:
                 {
                     "turn_index": turn["turn_index"],
                     "prompt": turn["content_template"],
-                    "text": text,
-                    "raw": provider.sanitize_response(raw),
+                    **_response_record(text, provider.sanitize_response(raw)),
                 }
             )
         return {"mode": mode, "turn_results": turn_results}
@@ -192,8 +316,7 @@ def run_item(provider, item: dict[str, Any], max_tokens: int) -> dict[str, Any]:
                     "turn_index": turn["turn_index"],
                     "branch_key": turn.get("branch_key"),
                     "prompt": turn["content_template"],
-                    "text": text,
-                    "raw": raw,
+                    **_response_record(text, raw),
                 }
             )
         return {"mode": mode, "turn_results": turn_results}
@@ -217,8 +340,7 @@ def run_item(provider, item: dict[str, Any], max_tokens: int) -> dict[str, Any]:
                     {
                         "turn_index": turn["turn_index"],
                         "prompt": turn["content_template"],
-                        "text": text,
-                        "raw": provider.sanitize_response(raw),
+                        **_response_record(text, provider.sanitize_response(raw)),
                     }
                 )
             scenario_results[branch_key] = branch_outputs
@@ -362,7 +484,9 @@ def score_item(item: dict[str, Any], response_payload: dict[str, Any]) -> tuple[
 
     if method == "reference_match":
         text = response_payload.get("text", "")
-        answers = item["scoring_params"].get("accepted_answers") or [item["ground_truth"]]
+        answers = [answer for answer in (item["scoring_params"].get("accepted_answers") or [item.get("ground_truth")]) if answer is not None]
+        if not answers:
+            return 0.0, {"predicted": text, "reference_missing": True}
         return max(exact_match(ans, text) for ans in answers), {"predicted": text}
 
     if method == "citation_verification":
@@ -498,6 +622,9 @@ class EvaluationRunService:
         }
         RUNS_DIR.mkdir(parents=True, exist_ok=True)
         self._ensure_bootstrapped()
+        for batch in self.store.list_evaluation_batches():
+            if batch.get("status") in {"queued", "running"}:
+                self._start_batch_scheduler(batch["batch_id"])
 
     def _ensure_bootstrapped(self) -> None:
         """Idempotent first-run setup: rebuild bank_items from JSONL + seed taxonomy.
@@ -1174,6 +1301,7 @@ class EvaluationRunService:
         run_kind: str = "base",
         retry_policy: str | None = None,
         source_failed_question_ids: list[str] | None = None,
+        defer_start: bool = False,
     ) -> dict[str, Any]:
         bank_version = bank_version or CURRENT_BANK_VERSION
         items = filter_items(
@@ -1193,14 +1321,20 @@ class EvaluationRunService:
             model_alias = provider.model.model_alias
             connection_record = self.registry.model_connections.get(model_connection_id, {})
             connection_name = connection_record.get("display_name")
+            pricing_snapshot = dict((connection_record.get("advanced") or {}).get("pricing") or {})
         else:
             provider = self.registry.resolve(provider_id, model_alias, timeout=timeout)
             connection_name = None
+            pricing_snapshot = {}
         judge_connection_id = judge_connection_id or self.store.get_setting("default_judge_connection_id")
         if judge_connection_id:
             judge_provider = self.registry.resolve_connection(judge_connection_id, timeout=timeout)
+            judge_record = self.registry.model_connections.get(judge_connection_id, {})
+            judge_pricing_snapshot = dict((judge_record.get("advanced") or {}).get("pricing") or {})
             if judge_provider.model.model_alias == model_alias:
                 raise ValueError("judge model must use a different model_alias from the answer model")
+        else:
+            judge_pricing_snapshot = {}
         run_id = make_run_id()
         meta = {
             "run_id": run_id,
@@ -1230,6 +1364,8 @@ class EvaluationRunService:
                 "model_connection_id": model_connection_id,
                 "bank_version": bank_version,
                 "judge_connection_id": judge_connection_id,
+                "pricing_snapshot": pricing_snapshot,
+                "judge_pricing_snapshot": judge_pricing_snapshot,
             },
             "progress": {
                 "items_total": len(items),
@@ -1251,13 +1387,195 @@ class EvaluationRunService:
             "canonical_summary_path": None,
         }
         self._write_run_meta(run_id, meta)
-        thread = threading.Thread(target=self._execute_run, args=(run_id, items), daemon=True)
-        with self.lock:
-            self.threads[run_id] = thread
-        thread.start()
+        if not defer_start:
+            thread = threading.Thread(target=self._execute_run, args=(run_id, items), daemon=True)
+            with self.lock:
+                self.threads[run_id] = thread
+            thread.start()
         return meta
 
-    def _score_single_item(self, run_id: str, item: dict[str, Any], provider_id: str, model_alias: str, timeout: int, max_tokens: int, connection_id: str | None = None) -> dict[str, Any]:
+    def create_evaluation_batch(
+        self, *, model_connection_ids: list[str], bank_version: str | None, modules: list[str] | None,
+        smoke: bool, timeout: int | None, max_items: int | None, limit_per_module: int,
+        concurrency_limit: int, max_active_models: int, judge_connection_id: str | None,
+        question_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
+        connection_ids = list(dict.fromkeys(str(value).strip() for value in model_connection_ids if str(value).strip()))
+        if len(connection_ids) < 2:
+            raise ValueError("at least two distinct model connections are required")
+        missing = [value for value in connection_ids if value not in self.registry.model_connections]
+        if missing:
+            raise ValueError(f"model connection not found: {', '.join(missing)}")
+        batch_id = make_batch_id()
+        payload = {
+            "batch_id": batch_id, "status": "queued", "bank_version": bank_version or CURRENT_BANK_VERSION,
+            "created_at": utc_now(), "config": {
+                "model_connection_ids": connection_ids, "modules": modules, "smoke": smoke,
+                "timeout": timeout, "max_items": max_items, "limit_per_module": limit_per_module,
+                "concurrency_limit": concurrency_limit, "max_active_models": max(1, max_active_models),
+                "judge_connection_id": judge_connection_id, "question_ids": question_ids,
+            },
+        }
+        self.store.create_evaluation_batch(payload)
+        try:
+            for index, connection_id in enumerate(connection_ids):
+                run = self.create_run(
+                    provider_id=None, model_alias=None, model_connection_id=connection_id, modules=modules,
+                    smoke=smoke, timeout=timeout, max_items=max_items, limit_per_module=limit_per_module,
+                    concurrency_limit=concurrency_limit, question_ids=question_ids, bank_version=bank_version,
+                    judge_connection_id=judge_connection_id, defer_start=True,
+                )
+                self.store.add_batch_run(batch_id, run["run_id"], connection_id, index)
+        except Exception as exc:
+            payload.update({"status": "failed", "finished_at": utc_now(), "error": str(exc)})
+            self.store.create_evaluation_batch(payload)
+            raise
+        self._start_batch_scheduler(batch_id)
+        return self.get_evaluation_batch(batch_id)
+
+    def _start_batch_scheduler(self, batch_id: str) -> None:
+        thread = threading.Thread(target=self._execute_batch, args=(batch_id,), daemon=True)
+        with self.lock:
+            self.threads[batch_id] = thread
+        thread.start()
+
+    def _execute_batch(self, batch_id: str) -> None:
+        batch = self.store.get_evaluation_batch(batch_id)
+        if not batch:
+            return
+        batch["status"] = "running"
+        self.store.create_evaluation_batch(batch)
+        pending = [row["run_id"] for row in batch["runs"] if self.get_run(row["run_id"]).get("execution_status") != "completed"]
+        active: dict[str, threading.Thread] = {}
+        limit = max(1, int(batch["config"].get("max_active_models", 2)))
+        while pending or active:
+            while pending and len(active) < limit:
+                run_id = pending.pop(0)
+                thread = threading.Thread(target=self._execute_run, args=(run_id, None), daemon=True)
+                active[run_id] = thread
+                with self.lock:
+                    self.threads[run_id] = thread
+                thread.start()
+            for run_id, thread in list(active.items()):
+                if not thread.is_alive():
+                    active.pop(run_id, None)
+            if active:
+                time.sleep(0.25)
+        batch = self.store.get_evaluation_batch(batch_id) or batch
+        child_runs = [self.get_run(row["run_id"]) for row in batch["runs"]]
+        batch["status"] = "completed" if any(run.get("execution_status") == "completed" for run in child_runs) else "failed"
+        batch["finished_at"] = utc_now()
+        self.store.create_evaluation_batch(batch)
+
+    def get_evaluation_batch(self, batch_id: str) -> dict[str, Any]:
+        batch = self.store.get_evaluation_batch(batch_id)
+        if not batch:
+            raise FileNotFoundError(batch_id)
+        batch["runs"] = [
+            {**row, **self.get_run(row["run_id"])}
+            for row in batch["runs"]
+        ]
+        return batch
+
+    def list_evaluation_batches(self) -> list[dict[str, Any]]:
+        return [self.get_evaluation_batch(row["batch_id"]) for row in self.store.list_evaluation_batches()]
+
+    def get_run_progress_grid(self, run_id: str) -> dict[str, Any]:
+        run = self.get_run(run_id)
+        items = filter_items(
+            self.store.get_all_bank_items(), bank_version=run["bank_version"],
+            modules=run["config"].get("modules"), question_ids=run["config"].get("question_ids"),
+            smoke=run["config"].get("smoke", False), limit_per_module=run["config"].get("limit_per_module", 1),
+            max_items=run["config"].get("max_items"),
+        )
+        attempts = self.get_canonical_items(run_id, include_bank=False) if run.get("execution_status") == "completed" else self.store.list_run_items(run_id)
+        latest = {row["question_id"]: self._attach_review_scores(row) for row in attempts}
+        cells = []
+        for item in items:
+            row = latest.get(item["question_id"])
+            raw_judge = ((row or {}).get("judge_assessment") or {}).get("raw_response") or {}
+            cells.append({
+                "question_id": item["question_id"], "module": item["module"],
+                "summary": str(item.get("prompt_template") or item.get("turn_script") or "")[:180],
+                "state": classify_grid_state(row), "status": row.get("status") if row else None,
+                "effective_score": row.get("effective_score") if row else None,
+                "score_source": row.get("score_source") if row else None,
+                "token_usage": row.get("token_usage") if row else None,
+                "estimated_cost": row.get("estimated_cost") if row else None,
+                "judge_token_usage": raw_judge.get("billing_usage"),
+                "judge_estimated_cost": raw_judge.get("estimated_cost"),
+                "latency_ms": row.get("latency_ms") if row else None,
+                "failure_type": row.get("failure_type") if row else None,
+                "error": row.get("error") if row else None,
+            })
+        scored = [cell for cell in cells if cell["state"] in {"correct", "incorrect"}]
+        billing_summary = summarize_billing_rows(list(latest.values()))
+        judge_rows = []
+        for row in latest.values():
+            raw_judge = (row.get("judge_assessment") or {}).get("raw_response") or {}
+            if raw_judge.get("billing_usage"):
+                judge_rows.append({"token_usage": raw_judge["billing_usage"], "estimated_cost": raw_judge.get("estimated_cost")})
+        judge_billing = summarize_billing_rows(judge_rows)
+        combined_billing = combine_billing_summaries([billing_summary, judge_billing])
+        module_billing = {
+            module: summarize_billing_rows([row for row in latest.values() if row.get("module") == module])
+            for module in sorted({cell["module"] for cell in cells})
+        }
+        correct_count = sum(cell["state"] == "correct" for cell in cells)
+        total_cost = combined_billing["estimated_cost"].get("amount")
+        return {
+            "run_id": run_id, "model_name": run.get("model_name") or run.get("model_alias"),
+            "execution_status": run.get("execution_status"), "cells": cells,
+            "summary": {
+                **combined_billing,
+                "answer_billing": billing_summary,
+                "judge_billing": judge_billing,
+                "total": len(cells), "processed": sum(cell["state"] != "unprocessed" for cell in cells),
+                "correct": correct_count,
+                "incorrect": sum(cell["state"] == "incorrect" for cell in cells),
+                "failed": sum(cell["state"] == "failed" for cell in cells),
+                "pending_score": sum(cell["state"] == "pending_score" for cell in cells),
+                "accuracy": (sum(cell["state"] == "correct" for cell in cells) / len(scored)) if scored else None,
+                "cost_per_correct": round(total_cost / correct_count, 10) if total_cost is not None and correct_count else None,
+                "module_billing": module_billing,
+            },
+        }
+
+    def get_batch_progress_grid(self, batch_id: str) -> dict[str, Any]:
+        batch = self.get_evaluation_batch(batch_id)
+        rows = [self.get_run_progress_grid(run["run_id"]) for run in batch["runs"]]
+        return {**batch, "models": rows, "billing_summary": combine_billing_summaries([
+            {"token_usage": row["summary"]["token_usage"], "estimated_cost": row["summary"]["estimated_cost"]}
+            for row in rows
+        ])}
+
+    def generate_batch_report(self, batch_id: str) -> dict[str, Any]:
+        grid = self.get_batch_progress_grid(batch_id)
+        lines = [f"# 多模型评测批次 {batch_id}", "", "> 费用为按 Run 创建时价格快照计算的估算值。", "", "| 模型 | 进度 | 正确 | 错误 | 失败 | 回答 Token | Judge Token | 总 Token | 估算费用 | 每道正确题成本 |", "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
+        for model in grid["models"]:
+            summary = model["summary"]
+            cost = summary["estimated_cost"]
+            cost_text = f"${cost['amount']:.6f}" if cost.get("amount") is not None else "未知/不完整"
+            average = f"${summary['cost_per_correct']:.6f}" if summary.get("cost_per_correct") is not None else "未知/不完整"
+            lines.append(f"| {model['model_name']} | {summary['processed']}/{summary['total']} | {summary['correct']} | {summary['incorrect']} | {summary['failed']} | {summary['answer_billing']['token_usage']['total_tokens']} | {summary['judge_billing']['token_usage']['total_tokens']} | {summary['token_usage']['total_tokens']} | {cost_text} | {average} |")
+        lines.extend(["", "## 每模块成本", "", "| 模型 | 模块 | Token | 估算费用 |", "|---|---|---:|---:|"])
+        for model in grid["models"]:
+            for module, billing in model["summary"].get("module_billing", {}).items():
+                cost = billing["estimated_cost"]
+                cost_text = f"${cost['amount']:.6f}" if cost.get("amount") is not None else "未知/不完整"
+                lines.append(f"| {model['model_name']} | {module} | {billing['token_usage']['total_tokens']} | {cost_text} |")
+        directory = BATCHES_DIR / batch_id
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / "report.md"
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        stored = self.store.get_evaluation_batch(batch_id)
+        if not stored:
+            raise FileNotFoundError(batch_id)
+        stored["report_path"] = str(path)
+        self.store.create_evaluation_batch(stored)
+        return {"batch_id": batch_id, "report_path": str(path), "report_ready": True, "content": path.read_text(encoding="utf-8")}
+
+    def _score_single_item(self, run_id: str, item: dict[str, Any], provider_id: str, model_alias: str, timeout: int, max_tokens: int, connection_id: str | None = None, pricing_snapshot: dict[str, Any] | None = None) -> dict[str, Any]:
         started = time.time()
         provider = self.registry.resolve_connection(connection_id, timeout=timeout) if connection_id else self.registry.resolve(provider_id, model_alias, timeout=timeout)
         snapshot_fields = {
@@ -1269,6 +1587,7 @@ class EvaluationRunService:
         try:
             response_payload = run_item(provider, item, max_tokens=max_tokens)
             primary_score, score_details = score_item(item, response_payload)
+            billing = summarize_item_billing(response_payload, pricing_snapshot)
             return {
                 "run_id": run_id,
                 "attempt_run_id": run_id,
@@ -1291,6 +1610,7 @@ class EvaluationRunService:
                 "latency_ms": int((time.time() - started) * 1000),
                 "is_retry_attempt": False,
                 "canonical_selected": False,
+                **billing,
                 **snapshot_fields,
             }
         except ProviderError as exc:
@@ -1405,10 +1725,15 @@ class EvaluationRunService:
             "judge_connection_id": judge_connection_id, "judge_model_alias": judge.model.model_alias,
         }
         try:
-            raw = judge.complete_messages([{"role": "user", "content": prompt}], max_tokens=700)
+            raw = judge.complete_messages([{"role": "user", "content": prompt}], max_tokens=1400)
             text = judge.extract_text(raw)
             parsed = self._parse_judge_payload(text)
-            return self.store.add_judge_assessment({**base, **parsed, "status": "ok", "raw_response": judge.sanitize_response(raw)})
+            sanitized = judge.sanitize_response(raw)
+            protocol = getattr(getattr(judge, "provider", None), "protocol", "unknown")
+            judge_usage = sanitized.get("billing_usage") or normalize_billing_usage(protocol, sanitized.get("usage"))
+            sanitized["billing_usage"] = judge_usage
+            sanitized["estimated_cost"] = calculate_estimated_cost(judge_usage, run_meta.get("config", {}).get("judge_pricing_snapshot"))
+            return self.store.add_judge_assessment({**base, **parsed, "status": "ok", "raw_response": sanitized})
         except Exception as exc:  # noqa: BLE001
             assessment = self.store.add_judge_assessment({**base, "status": "failed", "error": str(exc)})
             return assessment
@@ -1428,7 +1753,10 @@ class EvaluationRunService:
         score = float(payload["score"])
         if not 0 <= score <= 1:
             raise ValueError("manual score must be between 0 and 1")
-        verdict = payload.get("verdict") or ("pass" if score >= 0.8 else "partial" if score > 0 else "fail")
+        note = str(payload.get("note") or "").strip()
+        if not note:
+            raise ValueError("note is required")
+        verdict = payload.get("verdict") or ("pass" if score == 1 else "partial" if score > 0 else "fail")
         if verdict not in {"pass", "partial", "fail"}:
             raise ValueError("verdict must be pass, partial, or fail")
         rows = self.get_items(run_id, question_id=question_id)["items"]
@@ -1437,9 +1765,26 @@ class EvaluationRunService:
         attempt_run_id = payload.get("attempt_run_id") or rows[-1].get("attempt_run_id") or run_id
         review = self.store.add_manual_review({
             "run_id": run_id, "question_id": question_id, "attempt_run_id": attempt_run_id,
-            "reviewer": reviewer, "score": score, "verdict": verdict, "note": payload.get("note", ""),
+            "reviewer": reviewer, "score": score, "verdict": verdict, "note": note,
             "confirmed": payload.get("confirmed", True), "needs_review": payload.get("needs_review", False),
         })
+        root_id = self._resolve_root_run_id(run_id)
+        root_meta = self.get_run(root_id)
+        for artifact in (self._canonical_items_path(root_id), self._canonical_summary_path(root_id), self._report_path(root_id)):
+            if artifact.exists():
+                artifact.unlink()
+        root_meta["canonical_summary_path"] = None
+        root_meta["report_path"] = None
+        root_meta["summary_metrics"] = aggregate_scores([
+            self._attach_review_scores(row) for row in self.store.list_run_items(root_id)
+        ])
+        self.store.upsert_run(root_meta)
+        for batch in self.store.list_batches_for_run(root_id):
+            report_path = Path(batch.get("report_path") or "")
+            if report_path.is_file():
+                report_path.unlink()
+            batch["report_path"] = None
+            self.store.create_evaluation_batch(batch)
         return {"review": review, "item": self.get_items(run_id, question_id=question_id, include_bank=True)["items"][-1]}
 
     def get_review_history(self, run_id: str, question_id: str, attempt_run_id: str | None = None) -> dict[str, Any]:
@@ -1552,7 +1897,7 @@ class EvaluationRunService:
 
         if concurrency_limit == 1:
             for index, item in enumerate(items, start=1):
-                result = self._score_single_item(run_id, item, meta["provider_id"], meta["model_alias"], timeout, max_tokens, meta.get("connection_id"))
+                result = self._score_single_item(run_id, item, meta["provider_id"], meta["model_alias"], timeout, max_tokens, meta.get("connection_id"), meta["config"].get("pricing_snapshot"))
                 result["is_retry_attempt"] = meta["run_kind"] == "retry"
                 result["source_run_id"] = meta["parent_run_id"] or run_id
                 item_scores.append(result)
@@ -1572,6 +1917,7 @@ class EvaluationRunService:
                         timeout,
                         max_tokens,
                         meta.get("connection_id"),
+                        meta["config"].get("pricing_snapshot"),
                     ): item
                     for item in items
                 }
@@ -1590,6 +1936,7 @@ class EvaluationRunService:
         meta["status"] = "completed"
         meta["execution_status"] = "completed"
         meta["finished_at"] = utc_now()
+        summary_metrics["billing"] = summarize_billing_rows(item_scores)
         meta["summary_metrics"] = summary_metrics
         meta["totals"] = {
             "items_total": len(items),
@@ -1606,6 +1953,7 @@ class EvaluationRunService:
         failed = sum(1 for row in item_scores if row["status"] == "failed")
         ok = sum(1 for row in item_scores if row["status"] == "ok")
         summary_metrics = aggregate_scores(item_scores)
+        summary_metrics["billing"] = summarize_billing_rows(item_scores)
         meta["progress"] = {
             "items_total": items_total,
             "items_processed": completed,
@@ -1641,6 +1989,7 @@ class EvaluationRunService:
             concurrency_limit=concurrency_limit or 1,
             question_ids=question_ids,
             bank_version=base_meta.get("bank_version") or base_meta["config"].get("bank_version"),
+            judge_connection_id=base_meta["config"].get("judge_connection_id"),
             parent_run_id=run_id,
             run_kind="retry",
             retry_policy="failed_only",
@@ -1803,6 +2152,13 @@ class EvaluationRunService:
         root_meta = self.get_run(root_id)
         summary = self.get_canonical_summary(root_id)
         items = self.get_canonical_items(root_id)
+        answer_billing = summarize_billing_rows(items)
+        judge_billing_rows = []
+        for row in items:
+            raw_judge = (row.get("judge_assessment") or {}).get("raw_response") or {}
+            if raw_judge.get("billing_usage"):
+                judge_billing_rows.append({"token_usage": raw_judge["billing_usage"], "estimated_cost": raw_judge.get("estimated_cost")})
+        judge_billing = summarize_billing_rows(judge_billing_rows)
         failures = defaultdict(int)
         status_counts = defaultdict(int)
         success_by_module = defaultdict(int)
@@ -1855,6 +2211,7 @@ class EvaluationRunService:
             "status_counts": dict(status_counts),
             "lineage": dashboard["lineage"],
             "dashboard": dashboard,
+            "billing": {"answer": answer_billing, "judge": judge_billing},
         }
 
     def generate_report(self, run_id: str) -> dict[str, Any]:
@@ -1870,6 +2227,9 @@ class EvaluationRunService:
         lowest = min(module_scores.items(), key=lambda x: x[1]) if module_scores else ("-", 0.0)
         failure_heaviest = max(failure_by_module.items(), key=lambda x: x[1]) if failure_by_module else ("-", 0)
         lineage = self._collect_lineage_runs(root_id)
+        billing = payload["billing"]
+        answer_cost = billing["answer"]["estimated_cost"]
+        judge_cost = billing["judge"]["estimated_cost"]
 
         lines = [
             f"# {root_meta['provider_id']} / {root_meta['model_alias']} 测评报告",
@@ -1891,6 +2251,12 @@ class EvaluationRunService:
             f"- Failed: `{summary['totals']['items_failed']}`",
             f"- Failure Rate: `{round(summary['totals']['items_failed'] / max(1, summary['totals']['items_total']), 4)}`",
             f"- Retry Runs: `{sum(1 for run in lineage if run.get('run_kind') == 'retry')}`",
+            "",
+            "## Token 与估算费用",
+            f"- Answer Tokens: `{billing['answer']['token_usage']['total_tokens']}`",
+            f"- Answer Cost: `{answer_cost['amount'] if answer_cost.get('amount') is not None else 'unknown/incomplete'}` {answer_cost.get('currency', 'USD')}",
+            f"- Judge Tokens: `{billing['judge']['token_usage']['total_tokens']}`",
+            f"- Judge Cost: `{judge_cost['amount'] if judge_cost.get('amount') is not None else 'unknown/incomplete'}` {judge_cost.get('currency', 'USD')}",
             "",
             "## 综合分",
             f"- capability_score: `{summary['capability_score']}`",

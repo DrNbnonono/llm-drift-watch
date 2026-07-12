@@ -25,6 +25,7 @@ CONFIG_PATH = ROOT / "config" / "providers.json"
 SUPPORTED_PROTOCOLS = {"anthropic_compatible", "openai_compatible", "gemini", "mock"}
 SUPPORTED_AUTH_SCHEMES = {"x_api_key", "bearer", "x_goog_api_key", "none"}
 SUPPORTED_MODEL_LOOKUP_MODES = {"skip", "get_single", "list_contains"}
+MAX_REASONING_CHARS = 256 * 1024
 SECRET_KEY_ENV = "QUESTION_BANK_SECRET_KEY"
 # 明文存储 API Key 的开关。默认 True(明文),仅用于本地开发控制台。
 # 设置 ``QUESTION_BANK_PLAIN_API_KEYS=false`` 强制启用 Fernet 加密。
@@ -62,6 +63,31 @@ class ProviderError(RuntimeError):
         super().__init__(message)
         self.failure_type = failure_type
         self.status_code = status_code
+
+
+def normalize_billing_usage(protocol: str, usage: dict[str, Any] | None) -> dict[str, Any]:
+    usage = usage or {}
+    if protocol == "openai_compatible":
+        prompt = int(usage.get("prompt_tokens") or usage.get("input_tokens") or 0)
+        completion = int(usage.get("completion_tokens") or usage.get("output_tokens") or 0)
+        cached = int((usage.get("prompt_tokens_details") or {}).get("cached_tokens") or 0)
+        reasoning = int((usage.get("completion_tokens_details") or {}).get("reasoning_tokens") or 0)
+        return {
+            "input_tokens": max(0, prompt - cached),
+            "cached_input_tokens": cached,
+            "cache_creation_tokens": 0,
+            "output_tokens": completion,
+            "reasoning_tokens": reasoning,
+            "usage_complete": bool(usage),
+        }
+    return {
+        "input_tokens": int(usage.get("input_tokens") or usage.get("prompt_token_count") or 0),
+        "cached_input_tokens": int(usage.get("cache_read_input_tokens") or 0),
+        "cache_creation_tokens": int(usage.get("cache_creation_input_tokens") or 0),
+        "output_tokens": int(usage.get("output_tokens") or usage.get("candidates_token_count") or 0),
+        "reasoning_tokens": int(usage.get("reasoning_tokens") or 0),
+        "usage_complete": bool(usage),
+    }
 
 
 def _derive_fernet() -> Fernet:
@@ -456,6 +482,27 @@ def _build_auth_headers(provider: ProviderConfig, api_key: str) -> dict[str, str
     return headers
 
 
+def _normalized_content_payload(reasoning_parts: list[str], text_parts: list[str]) -> dict[str, Any]:
+    reasoning_full = "\n\n".join(part for part in reasoning_parts if part)
+    reasoning = reasoning_full[:MAX_REASONING_CHARS]
+    remaining = MAX_REASONING_CHARS
+    content_blocks: list[dict[str, str]] = []
+    for part in reasoning_parts:
+        if not part or remaining <= 0:
+            continue
+        kept = part[:remaining]
+        content_blocks.append({"type": "thinking", "thinking": kept})
+        remaining -= len(kept)
+    content_blocks.extend({"type": "text", "text": part} for part in text_parts if part)
+    return {
+        "reasoning": reasoning,
+        "reasoning_available": bool(reasoning_full),
+        "reasoning_truncated": len(reasoning_full) > MAX_REASONING_CHARS,
+        "reasoning_original_chars": len(reasoning_full),
+        "content_blocks": content_blocks,
+    }
+
+
 class BaseProvider:
     def __init__(self, provider: ProviderConfig, model: ModelConfig, api_key: str, timeout: int | None = None):
         self.provider = provider
@@ -527,6 +574,8 @@ class BaseProvider:
             input="\n".join(config_lines) + "\n",
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=max(5, int(self.timeout) + 5),
             check=False,
         )
@@ -599,16 +648,29 @@ class AnthropicCompatibleProvider(BaseProvider):
         return "\n".join(texts).strip()
 
     def sanitize_response(self, response: dict[str, Any]) -> dict[str, Any]:
+        blocks = response.get("content") or []
+        reasoning_parts = [
+            str(block.get("thinking") or "")
+            for block in blocks
+            if isinstance(block, dict) and block.get("type") == "thinking"
+        ]
+        text_parts = [
+            str(block.get("text") or "")
+            for block in blocks
+            if isinstance(block, dict) and block.get("type") == "text"
+        ]
         return {
             "provider_id": self.provider.provider_id,
             "model_alias": self.model.model_alias,
             "model_name": response.get("model", self.model.model_name),
             "text": self.extract_text(response),
             "usage": response.get("usage"),
+            "billing_usage": normalize_billing_usage("anthropic_compatible", response.get("usage")),
             "stop_reason": response.get("stop_reason"),
             "base_resp": response.get("base_resp"),
             "id": response.get("id"),
             "type": response.get("type"),
+            **_normalized_content_payload(reasoning_parts, text_parts),
         }
 
 
@@ -636,14 +698,20 @@ class OpenAICompatibleProvider(BaseProvider):
         return str(content).strip()
 
     def sanitize_response(self, response: dict[str, Any]) -> dict[str, Any]:
+        choice = (response.get("choices") or [{}])[0]
+        message = choice.get("message") or {}
+        reasoning_value = message.get("reasoning_content") or message.get("reasoning") or ""
+        text = self.extract_text(response)
         return {
             "provider_id": self.provider.provider_id,
             "model_alias": self.model.model_alias,
             "model_name": response.get("model", self.model.model_name),
             "text": self.extract_text(response),
             "usage": response.get("usage"),
-            "finish_reason": (response.get("choices") or [{}])[0].get("finish_reason"),
+            "billing_usage": normalize_billing_usage("openai_compatible", response.get("usage")),
+            "finish_reason": choice.get("finish_reason"),
             "id": response.get("id"),
+            **_normalized_content_payload([str(reasoning_value)] if reasoning_value else [], [text] if text else []),
         }
 
 
@@ -685,6 +753,7 @@ class GeminiProvider(BaseProvider):
             "model_name": self.model.model_name,
             "text": self.extract_text(response),
             "usage": response.get("usageMetadata"),
+            "billing_usage": normalize_billing_usage("gemini", response.get("usageMetadata")),
             "finish_reason": (response.get("candidates") or [{}])[0].get("finishReason"),
         }
 
@@ -830,6 +899,7 @@ class ProviderRegistry:
                     "model_lookup_mode": item.get("model_lookup_mode", "skip"),
                     "has_stored_secret": bool(item.get("encrypted_api_key")),
                     "advanced": item.get("advanced", {}),
+                    "pricing": (item.get("advanced") or {}).get("pricing", {}),
                 }
             )
         rows.sort(key=lambda row: (row["vendor_name"].lower(), row["display_name"].lower()))

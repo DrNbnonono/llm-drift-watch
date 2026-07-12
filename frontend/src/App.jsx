@@ -3,9 +3,14 @@ import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
 import BankPage from "./BankPage.jsx";
 import SystemSettings from "./SystemSettings.jsx";
+import RunReportListPage from "./RunReportListPage.jsx";
 import RunReportPage from "./RunReportPage.jsx";
 import RunItemsPage from "./RunItemsPage.jsx";
+import EvaluationMonitor from "./EvaluationMonitor.jsx";
 import TaxonomyPage from "./TaxonomyPage.jsx";
+import { parseReportHash, reportDetailHash, reportListHash } from "./reportRouting.js";
+import { defaultRunScope, historyHash, parseRunHash, runItemsHash } from "./runRouting.js";
+import { batchDetailHash, parseBatchHash } from "./batchRouting.js";
 
 const API_BASE =
   import.meta.env.VITE_API_BASE ||
@@ -742,13 +747,20 @@ function App() {
   const { t } = useTranslation();
   const bankRequestSeq = useRef(0);
   const runRequestSeq = useRef(0);
+  const reportRouteRequestRef = useRef(null);
   const [view, setView] = useState("create");
+  const [reportRoute, setReportRoute] = useState(() => parseReportHash(window.location.hash));
+  const [runRoute, setRunRoute] = useState(() => parseRunHash(window.location.hash));
   const [providers, setProviders] = useState([]);
   const [models, setModels] = useState([]);
   const [connections, setConnections] = useState([]);
   const [bankVersions, setBankVersions] = useState([]);
   const [reviewQueue, setReviewQueue] = useState([]);
   const [runs, setRuns] = useState([]);
+  const [batches, setBatches] = useState([]);
+  const [selectedBatchId, setSelectedBatchId] = useState(null);
+  const [monitorGrid, setMonitorGrid] = useState(null);
+  const [loadingMonitorGrid, setLoadingMonitorGrid] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState(null);
   const [selectedRun, setSelectedRun] = useState(null);
   const [runItems, setRunItems] = useState([]);
@@ -784,15 +796,20 @@ function App() {
   const [selectedHistoryRunIds, setSelectedHistoryRunIds] = useState([]);
   const [activeReportRunId, setActiveReportRunId] = useState(null);
   const [historyDetailOpen, setHistoryDetailOpen] = useState(false);
+  const [historyFilters, setHistoryFilters] = useState({ keyword: "", model: "", kind: "", status: "", bankVersion: "" });
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyPageSize, setHistoryPageSize] = useState(20);
 
   const [runForm, setRunForm] = useState({
     provider_id: "",
     model_alias: "",
     model_connection_id: "",
+    model_connection_ids: [],
     modules: [],
     smoke: false,
     timeout: 45,
     concurrency_limit: 1,
+    max_active_models: 2,
     max_items: "",
     bank_version: "QB-v1.3",
     judge_connection_id: "",
@@ -823,6 +840,7 @@ function App() {
     auth_env: "",
     headers_template_text: "{}",
     model_lookup_mode: "skip",
+    pricing: { currency: "USD", input_per_million: "", cached_input_per_million: "", cache_creation_per_million: "", output_per_million: "", reasoning_per_million: "" },
     enabled: true,
   });
 
@@ -861,6 +879,7 @@ function App() {
     refreshProviders();
     refreshBankVersions();
     refreshRuns();
+    refreshBatches();
     loadSystemPaths();
     loadBankFacets();
     loadBankItems();
@@ -903,6 +922,17 @@ function App() {
     }, 3000);
     return () => clearInterval(timer);
   }, [view, selectedRunId, itemFilters.canonical_only, runIsActive]);
+
+  useEffect(() => {
+    if (view !== "monitor" || (!selectedRunId && !selectedBatchId)) return undefined;
+    loadMonitorGrid();
+    const active = selectedBatchId
+      ? ["queued", "running"].includes(monitorGrid?.status)
+      : ["queued", "running"].includes(monitorGrid?.execution_status);
+    if (!active && monitorGrid) return undefined;
+    const timer = window.setInterval(loadMonitorGrid, 3000);
+    return () => window.clearInterval(timer);
+  }, [view, selectedRunId, selectedBatchId, monitorGrid?.status, monitorGrid?.execution_status]);
 
   useEffect(() => {
     if (selectedRunId) {
@@ -1009,6 +1039,18 @@ function App() {
     reportReady: runs.filter((run) => run.report_ready).length,
     retry: runs.filter((run) => (run.run_kind || "base") === "retry").length,
   }), [runs]);
+  const filteredHistoryRuns = useMemo(() => runs.filter((run) => {
+    const keyword = historyFilters.keyword.trim().toLowerCase();
+    const model = run.model_name || run.model_alias || "";
+    if (keyword && !`${run.run_id} ${model} ${run.provider_id || ""}`.toLowerCase().includes(keyword)) return false;
+    if (historyFilters.model && model !== historyFilters.model) return false;
+    if (historyFilters.kind && (run.run_kind || "base") !== historyFilters.kind) return false;
+    if (historyFilters.status && (run.execution_status || run.status) !== historyFilters.status) return false;
+    if (historyFilters.bankVersion && run.bank_version !== historyFilters.bankVersion) return false;
+    return true;
+  }).sort((a, b) => String(b.started_at || "").localeCompare(String(a.started_at || ""))), [runs, historyFilters]);
+  const pagedHistoryRuns = useMemo(() => filteredHistoryRuns.slice((historyPage - 1) * historyPageSize, historyPage * historyPageSize), [filteredHistoryRuns, historyPage, historyPageSize]);
+  useEffect(() => { setHistoryPage(1); }, [historyFilters]);
   const reportCandidates = useMemo(
     () => runs.filter((run) => run.report_ready || run.report_path || (run.execution_status || run.status) === "completed"),
     [runs],
@@ -1063,15 +1105,66 @@ function App() {
   }, [showProviderForm, showModelForm, showConnectionForm, historyDetailOpen]);
 
   useEffect(() => {
-    if (view !== "reports" || report || loadingReport) {
-      return;
+    function syncRoute() {
+      const nextRoute = parseReportHash(window.location.hash);
+      const nextRunRoute = parseRunHash(window.location.hash);
+      const nextBatchRoute = parseBatchHash(window.location.hash);
+      setReportRoute(nextRoute);
+      setRunRoute(nextRunRoute);
+      if (nextRoute.kind === "list") {
+        reportRouteRequestRef.current = null;
+        setView("reports");
+      } else if (nextRoute.kind === "detail") {
+        setView("runReport");
+      } else if (nextRunRoute.kind === "history") {
+        setView("history");
+        refreshRuns();
+      } else if (nextRunRoute.kind === "items" || nextRunRoute.kind === "item") {
+        setView("runItems");
+        setSelectedRunId(nextRunRoute.runId);
+        setSelectedQuestionId(nextRunRoute.questionId);
+        setItemFilters((prev) => ({
+          ...prev,
+          question_id: nextRunRoute.questionId || "",
+          canonical_only: nextRunRoute.scope === "canonical",
+        }));
+      } else if (nextBatchRoute.kind === "detail") {
+        setSelectedBatchId(nextBatchRoute.batchId);
+        setSelectedRunId(null);
+        setMonitorGrid(null);
+        setView("monitor");
+      }
     }
-    const readyCandidate = reportCandidates.find((item) => item.report_ready);
-    const candidateRunId = (selectedRun && selectedRun.report_ready ? selectedRun.run_id : readyCandidate?.run_id) || null;
-    if (candidateRunId) {
-      handlePreviewReport(candidateRunId, { generateIfMissing: false });
+    window.addEventListener("hashchange", syncRoute);
+    syncRoute();
+    return () => window.removeEventListener("hashchange", syncRoute);
+  }, []);
+
+  useEffect(() => {
+    if (view !== "history" && view !== "reports") return undefined;
+    const refreshWhenVisible = () => { if (document.visibilityState === "visible") { refreshRuns(); refreshBatches(); } };
+    refreshWhenVisible();
+    const timer = window.setInterval(refreshWhenVisible, 30000);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [view]);
+
+  useEffect(() => {
+    if ((runRoute.kind !== "items" && runRoute.kind !== "item") || !selectedRun) return;
+    if (!runRoute.scope) {
+      window.location.replace(runItemsHash(selectedRun.run_id, defaultRunScope(selectedRun), runRoute.questionId));
     }
-  }, [view, report, loadingReport, selectedRun, reportCandidates]);
+  }, [runRoute, selectedRun]);
+
+  useEffect(() => {
+    if (reportRoute.kind !== "detail" || !reportRoute.runId || loadingReport || report?.run_id === reportRoute.runId || reportRouteRequestRef.current === reportRoute.runId) return;
+    const run = reportCandidates.find((item) => item.run_id === reportRoute.runId);
+    reportRouteRequestRef.current = reportRoute.runId;
+    handlePreviewReport(reportRoute.runId, { generateIfMissing: Boolean(run && !run.report_ready), updateHash: false });
+  }, [reportRoute, reportCandidates, report, loadingReport]);
 
   useEffect(() => {
     if (view !== "review") return;
@@ -1138,7 +1231,8 @@ function App() {
     try {
       const data = await apiFetch("/api/runs");
       setRuns(data.runs || []);
-      if (!selectedRunId && data.runs?.length) {
+      const hashRun = parseRunHash(window.location.hash).runId;
+      if (!selectedRunId && !hashRun && data.runs?.length) {
         setSelectedRunId(data.runs[0].run_id);
       }
     } catch (err) {
@@ -1146,6 +1240,26 @@ function App() {
     } finally {
       setLoadingRuns(false);
     }
+  }
+
+  async function refreshBatches() {
+    try {
+      const data = await apiFetch("/api/evaluation-batches");
+      setBatches(data.batches || []);
+    } catch (err) {
+      if (!/404/.test(String(err?.message || err))) setError(humanizeError(err?.message || err));
+    }
+  }
+
+  async function loadMonitorGrid() {
+    const endpoint = selectedBatchId
+      ? `/api/evaluation-batches/${selectedBatchId}/progress-grid`
+      : selectedRunId ? `/api/runs/${selectedRunId}/progress-grid` : null;
+    if (!endpoint) return;
+    setLoadingMonitorGrid(true);
+    try { setMonitorGrid(await apiFetch(endpoint)); }
+    catch (err) { setError(humanizeError(err?.message || err)); }
+    finally { setLoadingMonitorGrid(false); }
   }
 
   async function refreshRun(runId) {
@@ -1265,6 +1379,30 @@ function App() {
     setError("");
     setNotice("");
     try {
+      const selectedConnectionIds = runForm.model_connection_ids.length
+        ? runForm.model_connection_ids
+        : (runForm.model_connection_id ? [runForm.model_connection_id] : []);
+      if (selectedConnectionIds.length > 1) {
+        const batch = await apiFetch("/api/evaluation-batches", {
+          method: "POST",
+          body: JSON.stringify({
+            model_connection_ids: selectedConnectionIds,
+            modules: runForm.modules.length ? runForm.modules : null,
+            smoke: runForm.smoke,
+            timeout: Number(runForm.timeout) || null,
+            concurrency_limit: Number(runForm.concurrency_limit) || 2,
+            max_active_models: Number(runForm.max_active_models) || 2,
+            max_items: runForm.max_items ? Number(runForm.max_items) : null,
+            bank_version: runForm.bank_version,
+            judge_connection_id: runForm.judge_connection_id || null,
+          }),
+        });
+        setSelectedRun(null);
+        setNotice(`已创建多模型评测批次 ${batch.batch_id}`);
+        window.location.hash = batchDetailHash(batch.batch_id);
+        await Promise.all([refreshBatches(), refreshRuns()]);
+        return;
+      }
       const connection = selectedConnection;
       const payload = {
         provider_id: connection?.provider_id || runForm.provider_id,
@@ -1289,6 +1427,8 @@ function App() {
       setSelectedRunId(run.run_id);
       setSelectedQuestionId(null);
       setSelectedRun(run);
+      setSelectedBatchId(null);
+      setMonitorGrid(null);
       setNotice(`已创建评测任务 ${run.run_id}`);
       setView("monitor");
       await refreshRuns();
@@ -1337,7 +1477,9 @@ function App() {
       const reportData = await fetchReportUntilReady(selectedRunId);
       setReport(reportData);
       setNotice(`报告已生成：${reportData.report_path}`);
-      setView("reports");
+      reportRouteRequestRef.current = selectedRunId;
+      window.location.hash = reportDetailHash(selectedRunId);
+      setView("runReport");
     } catch (err) {
       setError(humanizeError(err?.message || err));
     } finally {
@@ -1346,8 +1488,12 @@ function App() {
     }
   }
 
-  async function handlePreviewReport(runId, { generateIfMissing = false } = {}) {
+  async function handlePreviewReport(runId, { generateIfMissing = false, updateHash = true } = {}) {
     if (!runId) return;
+    reportRouteRequestRef.current = runId;
+    if (updateHash && window.location.hash !== reportDetailHash(runId)) {
+      window.location.hash = reportDetailHash(runId);
+    }
     setBusy(true);
     setLoadingReport(true);
     setError("");
@@ -1360,7 +1506,7 @@ function App() {
       const reportData = await fetchReportUntilReady(runId);
       setReport(reportData);
       setSelectedRunId(runId);
-      setView("reports");
+      setView("runReport");
       setNotice(`已加载报告：${reportData.report_path}`);
       await refreshRun(runId);
     } catch (err) {
@@ -1408,6 +1554,7 @@ function App() {
         enabled: connectionForm.enabled,
         headers_template: JSON.parse(connectionForm.headers_template_text || "{}"),
         model_lookup_mode: connectionForm.model_lookup_mode,
+        pricing: Object.fromEntries(Object.entries(connectionForm.pricing).map(([key, value]) => [key, key === "currency" ? value : (value === "" ? null : Number(value))])),
         keep_existing_secret: editingConnectionId ? !connectionForm.api_key.trim() : true,
       };
       const endpoint = editingConnectionId ? `/api/model-connections/${editingConnectionId}` : "/api/model-connections";
@@ -1669,6 +1816,7 @@ function App() {
       enabled: connection.enabled !== false,
       headers_template_text: JSON.stringify(connection.headers_template || {}, null, 2),
       model_lookup_mode: connection.model_lookup_mode || "skip",
+      pricing: { currency: "USD", input_per_million: connection.pricing?.input_per_million ?? "", cached_input_per_million: connection.pricing?.cached_input_per_million ?? "", cache_creation_per_million: connection.pricing?.cache_creation_per_million ?? "", output_per_million: connection.pricing?.output_per_million ?? "", reasoning_per_million: connection.pricing?.reasoning_per_million ?? "" },
     });
   }
 
@@ -1724,6 +1872,7 @@ function App() {
       enabled: true,
       headers_template_text: "{}",
       model_lookup_mode: "skip",
+      pricing: { currency: "USD", input_per_million: "", cached_input_per_million: "", cache_creation_per_million: "", output_per_million: "", reasoning_per_million: "" },
     });
   }
 
@@ -1889,7 +2038,15 @@ function App() {
             <button
               key={entry.key}
               className={view === entry.key ? "nav-item active" : "nav-item"}
-              onClick={() => setView(entry.key)}
+              onClick={() => {
+                if (entry.key === "reports") {
+                  window.location.hash = reportListHash();
+                } else if (entry.key === "history") {
+                  window.location.hash = historyHash();
+                } else {
+                  setView(entry.key);
+                }
+              }}
             >
               {t(`nav.${entry.key}`)}
             </button>
@@ -1968,6 +2125,13 @@ function App() {
                 />
               </div>
             ) : null}
+            <div className="multi-model-picker">
+              <div className="multi-model-picker-head"><div><strong>被测模型（可多选）</strong><p>选择一个模型创建普通 Run；选择两个及以上模型创建横向比较批次。</p></div><span>{runForm.model_connection_ids.length || (runForm.model_connection_id ? 1 : 0)} 个模型</span></div>
+              <div className="multi-model-list">{connections.map((connection) => {
+                const checked = runForm.model_connection_ids.includes(connection.connection_id);
+                return <div className={`multi-model-row ${checked ? "selected" : ""}`} key={connection.connection_id}><label className="checkbox-label"><input type="checkbox" checked={checked} onChange={(event) => setRunForm((prev) => ({ ...prev, model_connection_ids: event.target.checked ? [...prev.model_connection_ids, connection.connection_id] : prev.model_connection_ids.filter((id) => id !== connection.connection_id) }))} /><span><strong>{connection.display_name}</strong><small>{connection.vendor_name} · {connection.model_name} · {connection.configured ? "已连接" : "未配置 Key"}</small></span></label><span className="chip">{connection.pricing?.output_per_million != null ? `$${connection.pricing.output_per_million}/M 输出` : "费用未知"}</span></div>;
+              })}</div>
+            </div>
             <form className="form-grid wide" onSubmit={handleCreateRun}>
               <label>
                 模型接入实例
@@ -2025,6 +2189,10 @@ function App() {
               <label>
                 并发上限
                 <input type="number" min="1" max="4" value={runForm.concurrency_limit} onChange={(event) => setRunForm((prev) => ({ ...prev, concurrency_limit: event.target.value }))} />
+              </label>
+              <label>
+                同时活跃模型数
+                <input type="number" min="1" max="8" value={runForm.max_active_models} onChange={(event) => setRunForm((prev) => ({ ...prev, max_active_models: event.target.value }))} />
               </label>
               <label>
                 Max Items
@@ -2096,6 +2264,13 @@ function App() {
                 } : null}
               />
             </section>
+            <EvaluationMonitor
+              grid={monitorGrid}
+              loading={loadingMonitorGrid}
+              onRefresh={loadMonitorGrid}
+              onOpenItem={(runId, questionId) => { window.location.hash = runItemsHash(runId, "attempt", questionId); }}
+              onGenerateReport={async (batchId) => { const result = await apiFetch(`/api/evaluation-batches/${batchId}/report`, { method: "POST", body: "{}" }); setNotice(`批次报告已生成：${result.report_path}`); await loadMonitorGrid(); }}
+            />
             <section className="panel">
               <SectionTitle title="模块概览" />
               <div className="table-shell">
@@ -2149,11 +2324,15 @@ function App() {
             setItemPage={setItemPage}
             setItemPageSize={setItemPageSize}
             selectedRunId={selectedRunId}
+            selectedRun={selectedRun}
+            runs={runs}
             selectedRunItem={selectedRunItem}
             moduleOptions={moduleOptionsForFilters}
             helpers={runItemsHelpers}
             onRefreshRun={refreshRun}
-            onSelectQuestion={(qid) => setSelectedQuestionId(qid)}
+            onSelectQuestion={(qid) => { setSelectedQuestionId(qid); window.location.hash = runItemsHash(selectedRunId, itemFilters.canonical_only ? "canonical" : "attempt", qid); }}
+            onSelectRun={(runId) => { const run = runs.find((row) => row.run_id === runId); window.location.hash = runItemsHash(runId, defaultRunScope(run)); }}
+            onScopeChange={(scope) => { setItemFilters((prev) => ({ ...prev, canonical_only: scope === "canonical", question_id: "" })); window.location.hash = runItemsHash(selectedRunId, scope); }}
           />
         ) : null}
 
@@ -2169,11 +2348,15 @@ function App() {
             setItemPage={setItemPage}
             setItemPageSize={setItemPageSize}
             selectedRunId={selectedRunId}
+            selectedRun={selectedRun}
+            runs={runs}
             selectedRunItem={selectedRunItem}
             moduleOptions={moduleOptionsForFilters}
             helpers={runItemsHelpers}
             onRefreshRun={refreshRun}
-            onSelectQuestion={(qid) => setSelectedQuestionId(qid)}
+            onSelectQuestion={(qid) => { setSelectedQuestionId(qid); window.location.hash = runItemsHash(selectedRunId, itemFilters.canonical_only ? "canonical" : "attempt", qid); }}
+            onSelectRun={(runId) => { const run = runs.find((row) => row.run_id === runId); window.location.hash = runItemsHash(runId, defaultRunScope(run)); }}
+            onScopeChange={(scope) => { setItemFilters((prev) => ({ ...prev, canonical_only: scope === "canonical", question_id: "" })); window.location.hash = runItemsHash(selectedRunId, scope); }}
           />
         ) : null}
 
@@ -2437,6 +2620,10 @@ function App() {
                     enabled
                   </label>
                 </div>
+                <div className="modal-section-head">估算单价（USD / 1M Token）</div>
+                <div className="form-grid compact-form-grid pricing-grid">
+                  {[['input_per_million','普通输入'],['cached_input_per_million','缓存读取'],['cache_creation_per_million','缓存写入'],['output_per_million','标准输出'],['reasoning_per_million','Reasoning']].map(([key, label]) => <label key={key}>{label}<input type="number" min="0" step="0.000001" value={connectionForm.pricing[key]} onChange={(event) => setConnectionForm((prev) => ({ ...prev, pricing: { ...prev.pricing, [key]: event.target.value } }))} placeholder="留空表示未知" /></label>)}
+                </div>
                 <details className="advanced-details">
                   <summary>高级选项</summary>
                   <div className="modal-section-head">高级请求头</div>
@@ -2571,6 +2758,7 @@ function App() {
         {view === "history" ? (
           <section className="panel history-panel">
             <SectionTitle title="历史 Runs" meta={`共 ${runs.length} 条`} />
+            {batches.length ? <div className="detail-card batch-history-card"><SectionTitle title="多模型评测批次" meta={`共 ${batches.length} 个`} /><div className="batch-history-list">{batches.map((batch) => <button type="button" className="batch-history-row" key={batch.batch_id} onClick={() => { window.location.hash = batchDetailHash(batch.batch_id); }}><span className="mono">{batch.batch_id}</span><span>{batch.status}</span><span>{batch.runs?.length || 0} 个模型</span><span>{batch.bank_version}</span></button>)}</div></div> : null}
             <div className="history-hero">
               <div className="detail-card history-hero-card">
                 <PathList title="历史运行目录" paths={{ evaluation_runs_root: systemPaths?.evaluation_runs_root }} />
@@ -2584,8 +2772,17 @@ function App() {
               </div>
             </div>
 
+            <div className="filters-row history-filters">
+              <label>关键词<input value={historyFilters.keyword} onChange={(e) => setHistoryFilters((old) => ({ ...old, keyword: e.target.value }))} placeholder="Run ID / 模型 / Provider" /></label>
+              <label>模型<select value={historyFilters.model} onChange={(e) => setHistoryFilters((old) => ({ ...old, model: e.target.value }))}><option value="">全部</option>{[...new Set(runs.map((run) => run.model_name || run.model_alias).filter(Boolean))].map((model) => <option key={model}>{model}</option>)}</select></label>
+              <label>Run 类型<select value={historyFilters.kind} onChange={(e) => setHistoryFilters((old) => ({ ...old, kind: e.target.value }))}><option value="">全部</option><option value="base">base</option><option value="retry">retry</option></select></label>
+              <label>状态<select value={historyFilters.status} onChange={(e) => setHistoryFilters((old) => ({ ...old, status: e.target.value }))}><option value="">全部</option><option value="completed">completed</option><option value="running">running</option><option value="failed">failed</option></select></label>
+              <label>题库版本<select value={historyFilters.bankVersion} onChange={(e) => setHistoryFilters((old) => ({ ...old, bankVersion: e.target.value }))}><option value="">全部</option>{[...new Set(runs.map((run) => run.bank_version).filter(Boolean))].map((version) => <option key={version}>{version}</option>)}</select></label>
+            </div>
+            <PaginationBar page={historyPage} pageSize={historyPageSize} total={filteredHistoryRuns.length} onPageChange={setHistoryPage} onPageSizeChange={(size) => { setHistoryPageSize(size); setHistoryPage(1); }} />
             <div className="history-toolbar">
               <div className="history-toolbar-group">
+                <button className="mini-button" type="button" onClick={refreshRuns} disabled={loadingRuns}>立即刷新</button>
                 <button className="mini-button" type="button" onClick={toggleAllHistoryRuns} disabled={!runs.length}>
                   {runs.length && selectedHistoryRunIds.length === runs.length ? "取消全选" : "全选当前列表"}
                 </button>
@@ -2636,15 +2833,10 @@ function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {runs.map((run) => (
+                    {pagedHistoryRuns.map((run) => (
                       <tr
                         key={run.run_id}
                         className={selectedRunId === run.run_id ? "row-active clickable-row" : "clickable-row"}
-                        onDoubleClick={() => {
-                          setSelectedRunId(run.run_id);
-                          setSelectedQuestionId(null);
-                          setView("runReport");
-                        }}
                         onClick={() => {
                           setSelectedRunId(run.run_id);
                           setSelectedQuestionId(null);
@@ -2660,7 +2852,7 @@ function App() {
                             aria-label={`选择 ${run.run_id}`}
                           />
                         </td>
-                        <td className="mono data-cell-wrap">{run.run_id}</td>
+                        <td className="mono data-cell-wrap">{run.run_id}<br /><small>{run.parent_run_id ? `Root: ${run.parent_run_id}` : `Retries: ${runs.filter((row) => row.parent_run_id === run.run_id).length}`}</small></td>
                         <td className="data-cell-wrap">{run.run_kind || "base"}</td>
                         <td className="data-cell-wrap">{run.provider_id || "-"}</td>
                         <td className="data-cell-wrap">{run.model_alias || run.model_name || "-"}</td>
@@ -2672,6 +2864,9 @@ function App() {
                         <td><CopyButton value={run.run_dir} label="复制目录" /></td>
                         <td>
                           <div className="history-row-actions" onClick={(event) => event.stopPropagation()}>
+                            <button className="mini-button" type="button" onClick={() => { window.location.hash = runItemsHash(run.run_id, defaultRunScope(run)); }}>
+                              逐题结果
+                            </button>
                             <button
                               className="mini-button"
                               type="button"
@@ -2762,31 +2957,23 @@ function App() {
         ) : null}
 
         {view === "reports" ? (
-          <RunReportPage
-            report={report}
-            reportCandidates={reportCandidates}
-            activeReportRunId={activeReportRunId}
-            reportSummaryMetrics={reportSummaryMetrics}
-            loadingReport={loadingReport}
-            systemPaths={systemPaths}
-            apiFetch={apiFetch}
-            onBack={() => setView("history")}
-            onPreviewReport={handlePreviewReport}
-            helpers={reportPageHelpers}
+          <RunReportListPage
+            runs={reportCandidates}
+            loading={loadingRuns}
+            onOpenReport={(run) => {
+              window.location.hash = reportDetailHash(run.run_id);
+            }}
+            helpers={{ SectionTitle, PaginationBar, RunArtifactStatus, EmptyState }}
           />
         ) : null}
 
         {view === "runReport" ? (
           <RunReportPage
             report={report}
-            reportCandidates={reportCandidates}
-            activeReportRunId={activeReportRunId}
             reportSummaryMetrics={reportSummaryMetrics}
             loadingReport={loadingReport}
-            systemPaths={systemPaths}
-            apiFetch={apiFetch}
-            onBack={() => setView("history")}
-            onPreviewReport={handlePreviewReport}
+            onBack={() => { window.location.hash = reportListHash(); }}
+            onViewItems={(runId) => { window.location.hash = runItemsHash(runId, "canonical"); }}
             helpers={reportPageHelpers}
           />
         ) : null}

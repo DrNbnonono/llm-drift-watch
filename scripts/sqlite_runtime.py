@@ -241,6 +241,8 @@ class SQLiteStore:
                     bank_item_snapshot_json TEXT,
                     bank_item_content_hash TEXT,
                     snapshot_origin TEXT,
+                    token_usage_json TEXT,
+                    estimated_cost_json TEXT,
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE(run_id, question_id, attempt_run_id),
                     FOREIGN KEY (run_id) REFERENCES runs(run_id) ON DELETE CASCADE
@@ -251,6 +253,27 @@ class SQLiteStore:
                 CREATE INDEX IF NOT EXISTS idx_bank_items_module ON bank_items(module);
                 CREATE INDEX IF NOT EXISTS idx_bank_items_subtype ON bank_items(subtype);
                 CREATE INDEX IF NOT EXISTS idx_bank_items_item_format ON bank_items(item_format);
+
+                CREATE TABLE IF NOT EXISTS evaluation_batches (
+                    batch_id TEXT PRIMARY KEY,
+                    status TEXT NOT NULL,
+                    bank_version TEXT,
+                    config_json TEXT NOT NULL DEFAULT '{}',
+                    report_path TEXT,
+                    created_at TEXT NOT NULL,
+                    finished_at TEXT,
+                    error TEXT
+                );
+                CREATE TABLE IF NOT EXISTS evaluation_batch_runs (
+                    batch_id TEXT NOT NULL,
+                    run_id TEXT NOT NULL,
+                    connection_id TEXT NOT NULL,
+                    sort_order INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY (batch_id, run_id),
+                    FOREIGN KEY (batch_id) REFERENCES evaluation_batches(batch_id) ON DELETE CASCADE,
+                    FOREIGN KEY (run_id) REFERENCES runs(run_id) ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS idx_evaluation_batch_runs_batch ON evaluation_batch_runs(batch_id, sort_order);
 
                 CREATE TABLE IF NOT EXISTS judge_assessments (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -375,6 +398,8 @@ class SQLiteStore:
             self._ensure_column(conn, "run_items", "bank_item_snapshot_json", "TEXT")
             self._ensure_column(conn, "run_items", "bank_item_content_hash", "TEXT")
             self._ensure_column(conn, "run_items", "snapshot_origin", "TEXT")
+            self._ensure_column(conn, "run_items", "token_usage_json", "TEXT")
+            self._ensure_column(conn, "run_items", "estimated_cost_json", "TEXT")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_items_module ON bank_items(module)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_items_subtype ON bank_items(subtype)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_items_item_format ON bank_items(item_format)")
@@ -689,6 +714,54 @@ class SQLiteStore:
     def delete_model_connection(self, connection_id: str) -> None:
         with self._connect() as conn:
             conn.execute("DELETE FROM model_connections WHERE connection_id = ?", (connection_id,))
+
+    def create_evaluation_batch(self, payload: dict[str, Any]) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT INTO evaluation_batches
+                   (batch_id, status, bank_version, config_json, report_path, created_at, finished_at, error)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(batch_id) DO UPDATE SET status=excluded.status,
+                   report_path=excluded.report_path, finished_at=excluded.finished_at, error=excluded.error""",
+                (payload["batch_id"], payload.get("status", "queued"), payload.get("bank_version"),
+                 json_dumps(payload.get("config", {})), payload.get("report_path"), payload.get("created_at"),
+                 payload.get("finished_at"), payload.get("error")),
+            )
+
+    def add_batch_run(self, batch_id: str, run_id: str, connection_id: str, sort_order: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO evaluation_batch_runs (batch_id, run_id, connection_id, sort_order) VALUES (?, ?, ?, ?)",
+                (batch_id, run_id, connection_id, int(sort_order)),
+            )
+
+    def get_evaluation_batch(self, batch_id: str) -> dict[str, Any] | None:
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM evaluation_batches WHERE batch_id = ?", (batch_id,)).fetchone()
+            if row is None:
+                return None
+            runs = conn.execute(
+                "SELECT run_id, connection_id, sort_order FROM evaluation_batch_runs WHERE batch_id = ? ORDER BY sort_order, run_id",
+                (batch_id,),
+            ).fetchall()
+        return {
+            "batch_id": row["batch_id"], "status": row["status"], "bank_version": row["bank_version"],
+            "config": json_loads(row["config_json"], {}), "report_path": row["report_path"],
+            "created_at": row["created_at"], "finished_at": row["finished_at"], "error": row["error"],
+            "runs": [dict(item) for item in runs],
+        }
+
+    def list_evaluation_batches(self) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            ids = [row["batch_id"] for row in conn.execute("SELECT batch_id FROM evaluation_batches ORDER BY created_at DESC").fetchall()]
+        return [row for batch_id in ids if (row := self.get_evaluation_batch(batch_id)) is not None]
+
+    def list_batches_for_run(self, run_id: str) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            ids = [row["batch_id"] for row in conn.execute(
+                "SELECT batch_id FROM evaluation_batch_runs WHERE run_id = ? ORDER BY batch_id", (run_id,)
+            ).fetchall()]
+        return [row for batch_id in ids if (row := self.get_evaluation_batch(batch_id)) is not None]
 
     def load_model_connections(self) -> list[dict[str, Any]]:
         with self._connect() as conn:
@@ -1106,8 +1179,9 @@ class SQLiteStore:
                 run_id, question_id, module, item_format, score_method, primary_score, aux_score,
                 status, response_json, score_details_json, error, failure_type, started_at, finished_at,
                 latency_ms, provider_id, model_alias, attempt_run_id, source_run_id, is_retry_attempt, canonical_selected,
-                bank_version, bank_item_snapshot_json, bank_item_content_hash, snapshot_origin
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                bank_version, bank_item_snapshot_json, bank_item_content_hash, snapshot_origin,
+                token_usage_json, estimated_cost_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(run_id, question_id, attempt_run_id) DO UPDATE SET
                 module=excluded.module,
                 item_format=excluded.item_format,
@@ -1130,7 +1204,9 @@ class SQLiteStore:
                 bank_version=excluded.bank_version,
                 bank_item_snapshot_json=excluded.bank_item_snapshot_json,
                 bank_item_content_hash=excluded.bank_item_content_hash,
-                snapshot_origin=excluded.snapshot_origin
+                snapshot_origin=excluded.snapshot_origin,
+                token_usage_json=excluded.token_usage_json,
+                estimated_cost_json=excluded.estimated_cost_json
             """,
             (
                 row["run_id"],
@@ -1158,6 +1234,8 @@ class SQLiteStore:
                 json_dumps(row.get("bank_item_snapshot")) if row.get("bank_item_snapshot") is not None else None,
                 row.get("bank_item_content_hash"),
                 row.get("snapshot_origin"),
+                json_dumps(row.get("token_usage")) if row.get("token_usage") is not None else None,
+                json_dumps(row.get("estimated_cost")) if row.get("estimated_cost") is not None else None,
             ),
         )
 
@@ -1269,6 +1347,8 @@ class SQLiteStore:
             "bank_item_snapshot": json_loads(row["bank_item_snapshot_json"], None),
             "bank_item_content_hash": row["bank_item_content_hash"],
             "snapshot_origin": row["snapshot_origin"],
+            "token_usage": json_loads(row["token_usage_json"], None),
+            "estimated_cost": json_loads(row["estimated_cost_json"], None),
         }
 
     # ------------------------------------------------------------------

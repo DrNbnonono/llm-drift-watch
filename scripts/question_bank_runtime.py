@@ -246,7 +246,7 @@ def evaluate_constraint_set(text: str, params: dict) -> tuple[float, dict]:
             elif kind == "lowercase_only":
                 letters = [char for char in text if char.isalpha()]
                 ok = bool(letters) and all(char.islower() for char in letters)
-        except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+        except (KeyError, TypeError, ValueError, SyntaxError, json.JSONDecodeError):
             ok = False
         results.append({"type": kind, "passed": bool(ok), "observed": observed})
 
