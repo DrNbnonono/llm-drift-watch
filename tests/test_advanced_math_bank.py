@@ -11,7 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from advanced_math_bank import build_advanced_math_bank, recompute_answer  # noqa: E402
+from advanced_math_bank import audit_advanced_math_bank, build_advanced_math_bank, recompute_answer  # noqa: E402
 
 
 class AdvancedMathBankTests(unittest.TestCase):
@@ -49,6 +49,25 @@ class AdvancedMathBankTests(unittest.TestCase):
             self.assertGreaterEqual(item["reasoning_profile"]["minimum_nontrivial_steps"], 2, item["question_id"])
             self.assertTrue(item["reasoning_profile"]["common_traps"], item["question_id"])
             self.assertTrue(item["discrimination_profile"]["item_family"], item["question_id"])
+
+    def test_audit_rejects_more_than_three_numeric_reskins(self):
+        base = self.formal[0]
+        copies = []
+        for index in range(4):
+            item = {**base, "question_id": f"A1-X{index:03d}", "prompt_template": f"求多项式 x²+{index}x+1 在 x={index + 2} 时的值。"}
+            copies.append(item)
+        audit = audit_advanced_math_bank(copies)
+        self.assertFalse(audit["passed"])
+        self.assertEqual(audit["violations"][0]["rule"], "parameter_reskin_limit")
+
+    def test_source_seed_catalog_prevents_template_farming(self):
+        items = [*self.formal, *self.reserve]
+        audit = audit_advanced_math_bank(items)
+        self.assertTrue(audit["passed"], audit["violations"])
+        self.assertGreaterEqual(audit["source_catalog_count"], 12)
+        self.assertGreaterEqual(audit["distinct_source_seed_count"], 200)
+        self.assertLessEqual(audit["max_items_per_source_seed"], 2)
+        self.assertLessEqual(audit["max_items_per_prompt_cluster"], 2)
 
 
 if __name__ == "__main__":

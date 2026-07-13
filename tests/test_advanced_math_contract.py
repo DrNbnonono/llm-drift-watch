@@ -93,6 +93,33 @@ class AdvancedMathContractTests(unittest.TestCase):
         self.assertEqual(normalized["prerequisites"], ["linear_algebra", "graph_spectrum"])
         self.assertEqual(normalized["answer_contract"]["format"], "integer")
 
+    def test_item_detail_projection_exposes_advanced_math_metadata(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            store = SQLiteStore(
+                db_path=root / "evaluation.sqlite",
+                runs_dir=root / "runs",
+                bank_items_path=root / "bank.jsonl",
+            )
+            item = make_math_item("A1-H004", "stretch")
+            item.update(
+                {
+                    "prerequisites": ["finite_fields"],
+                    "reasoning_profile": {"minimum_nontrivial_steps": 5},
+                    "discrimination_profile": {"item_family": "finite_field_graph"},
+                    "answer_contract": {"format": "integer", "canonical_answer": "7"},
+                }
+            )
+            store.create_bank_item(item)
+            service = object.__new__(EvaluationRunService)
+            service.store = store
+            service.bank_item_index = {}
+            result = service.get_bank_item("A1-H004", "QB-v1.3")
+            self.assertEqual(result["difficulty_tier"], "stretch")
+            self.assertEqual(result["prerequisites"], ["finite_fields"])
+            self.assertEqual(result["reasoning_profile"]["minimum_nontrivial_steps"], 5)
+            self.assertEqual(result["answer_contract"]["canonical_answer"], "7")
+
 
 if __name__ == "__main__":
     unittest.main()

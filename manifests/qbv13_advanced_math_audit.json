@@ -1,0 +1,37 @@
+{
+  "passed": true,
+  "total": 400,
+  "qa_status_counts": {
+    "ready": 240,
+    "frozen": 160
+  },
+  "difficulty_tier_counts": {
+    "olympiad": 132,
+    "advanced_hs": 100,
+    "undergraduate": 100,
+    "stretch": 34,
+    "foundation": 34
+  },
+  "subtype_counts": {
+    "advanced_algebra": 50,
+    "inequality_optimization": 36,
+    "number_theory": 40,
+    "combinatorics": 40,
+    "discrete_probability": 47,
+    "graph_theory": 40,
+    "linear_algebra": 40,
+    "recurrence_generating_functions": 30,
+    "geometry_analytic": 27,
+    "algorithms_discrete_optimization": 20,
+    "abstract_algebra_intro": 17,
+    "information_coding": 13
+  },
+  "recompute_failures": [],
+  "parameter_reskin_clusters": [],
+  "source_catalog_count": 16,
+  "distinct_source_seed_count": 400,
+  "max_items_per_source_seed": 1,
+  "max_items_per_prompt_cluster": 1,
+  "violations": [],
+  "source_policy": "public course and competition materials define coverage and source seeds; formal wording is independently rewritten"
+}

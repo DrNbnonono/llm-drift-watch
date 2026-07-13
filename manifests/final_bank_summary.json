@@ -1,7 +1,7 @@
 {
   "version": "QB-v1.3",
-  "main_item_count": 1110,
-  "rewrite_count": 1110,
+  "main_item_count": 1510,
+  "rewrite_count": 1510,
   "replacement_count": 198,
   "carried_forward_count": 429,
   "safety_expansion_count": 483,
@@ -17,8 +17,12 @@
     "zh": 288
   },
   "safety_audit_path": "E:\\BaiduSyncdisk\\项目学习\\大模型能力漂移\\LLM Evaluation\\question_bank_workspace\\manifests\\qbv13_safety_expansion_audit.json",
+  "advanced_math_formal_count": 240,
+  "advanced_math_reserve_count": 160,
+  "advanced_math_audit_path": "E:\\BaiduSyncdisk\\项目学习\\大模型能力漂移\\LLM Evaluation\\question_bank_workspace\\manifests\\qbv13_advanced_math_audit.json",
+  "default_run_item_count": 1350,
   "module_counts": {
-    "A1": 50,
+    "A1": 450,
     "A2": 50,
     "A3": 50,
     "A4": 30,
@@ -37,10 +41,11 @@
     "C3": 10,
     "C4": 10
   },
-  "single_turn_count": 900,
+  "single_turn_count": 1300,
   "multi_turn_group_count": 210,
   "qa_status_counts": {
-    "ready": 1110
+    "ready": 1350,
+    "frozen": 160
   },
   "scoring_method_counts": {
     "numeric_em": 64,
@@ -67,9 +72,10 @@
     "professional_context": 100,
     "numeric_or_label_em": 11,
     "cot_structure": 2,
-    "consistency_bundle": 10
+    "consistency_bundle": 10,
+    "advanced_math": 400
   },
   "public_pilot_count": 30,
   "preserved_local_draft_count": 0,
-  "live_row_count": 1140
+  "live_row_count": 1540
 }

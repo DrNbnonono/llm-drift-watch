@@ -9,11 +9,18 @@ from copy import deepcopy
 
 from generate_formal_bank import MODULE_TARGETS, generate_bank
 from build_qbv13_safety_expansion import AUDIT_PATH, build_safety_expansion
+from advanced_math_bank import (
+    audit_advanced_math_bank,
+    build_advanced_math_bank,
+    build_advanced_math_candidates,
+    build_advanced_math_rewrites,
+)
 from qbv13_replacement_builders import BUILDERS, VERSION
-from question_bank_runtime import FINAL_BANK, MANIFESTS, REWRITE_DRAFTS, load_jsonl, write_jsonl
+from question_bank_runtime import FINAL_BANK, MANIFESTS, NORMALIZED, REWRITE_DRAFTS, load_jsonl, write_jsonl
 
 
 RETIREMENT_MANIFEST = MANIFESTS / "qbv1_2_near_duplicate_retirements.json"
+ADVANCED_MATH_AUDIT_PATH = MANIFESTS / "qbv13_advanced_math_audit.json"
 
 
 def build_qbv13() -> tuple[list[dict], list[dict], dict]:
@@ -67,7 +74,14 @@ def build_qbv13() -> tuple[list[dict], list[dict], dict]:
     expansion_items, expansion_rewrites, expansion_audit = build_safety_expansion(final_items)
     final_items.extend(expansion_items)
     final_rewrites.extend(expansion_rewrites)
+    advanced_math_formal, advanced_math_reserve = build_advanced_math_bank()
+    advanced_math_items = [*advanced_math_formal, *advanced_math_reserve]
+    advanced_math_rewrites = build_advanced_math_rewrites(advanced_math_items)
+    advanced_math_audit = audit_advanced_math_bank(advanced_math_items)
+    final_items.extend(advanced_math_items)
+    final_rewrites.extend(advanced_math_rewrites)
     expected_targets = dict(MODULE_TARGETS)
+    expected_targets["A1"] += len(advanced_math_items)
     expected_targets.update({f"B{i}": 100 for i in range(1, 9)})
     module_counts = Counter(item["module"] for item in final_items)
     if module_counts != Counter(expected_targets):
@@ -85,12 +99,18 @@ def build_qbv13() -> tuple[list[dict], list[dict], dict]:
         "safety_source_counts": expansion_audit["source_counts"],
         "safety_language_counts": expansion_audit["language_counts"],
         "safety_audit_path": str(AUDIT_PATH),
+        "advanced_math_formal_count": len(advanced_math_formal),
+        "advanced_math_reserve_count": len(advanced_math_reserve),
+        "advanced_math_audit_path": str(ADVANCED_MATH_AUDIT_PATH),
+        "default_run_item_count": sum(item.get("qa_status") == "ready" for item in final_items),
         "module_counts": dict(module_counts),
         "single_turn_count": sum(item["item_format"] == "single_turn" for item in final_items),
         "multi_turn_group_count": sum(item["item_format"] == "multi_turn_group" for item in final_items),
         "qa_status_counts": dict(Counter(item["qa_status"] for item in final_items)),
         "scoring_method_counts": dict(Counter(item["scoring_method"] for item in final_items)),
         "_safety_audit": expansion_audit,
+        "_advanced_math_audit": advanced_math_audit,
+        "_advanced_math_candidates": build_advanced_math_candidates(advanced_math_items),
     }
     return final_rewrites, final_items, summary
 
@@ -101,6 +121,8 @@ def main() -> None:
     args = parser.parse_args()
     rewrites, items, summary = build_qbv13()
     safety_audit = summary.pop("_safety_audit")
+    advanced_math_audit = summary.pop("_advanced_math_audit")
+    advanced_math_candidates = summary.pop("_advanced_math_candidates")
     if not args.write:
         print(json.dumps(summary, ensure_ascii=False, indent=2))
         return
@@ -112,6 +134,8 @@ def main() -> None:
     write_jsonl(main_snapshot, items)
     write_jsonl(rewrite_snapshot, rewrites)
     AUDIT_PATH.write_text(json.dumps(safety_audit, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    ADVANCED_MATH_AUDIT_PATH.write_text(json.dumps(advanced_math_audit, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    write_jsonl(NORMALIZED / "qbv13_advanced_math_candidates.jsonl", advanced_math_candidates)
 
     pilot_items_path = final_generated / "final_bank_items_qbv1_3_pilot.jsonl"
     pilot_rewrites_path = rewrite_generated / "rewrite_drafts_qbv1_3_pilot.jsonl"

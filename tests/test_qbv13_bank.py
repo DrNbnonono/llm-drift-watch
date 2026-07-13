@@ -102,12 +102,16 @@ class QBV13BankTests(unittest.TestCase):
         cls.rewrites, cls.items, cls.summary = build_qbv13()
 
     def test_production_counts_and_status(self):
-        self.assertEqual(len(self.items), 1110)
-        self.assertEqual(len(self.rewrites), 1110)
+        self.assertEqual(len(self.items), 1510)
+        self.assertEqual(len(self.rewrites), 1510)
         self.assertEqual(self.summary["replacement_count"], 198)
         self.assertEqual(self.summary["safety_expansion_count"], 483)
+        self.assertEqual(self.summary["advanced_math_formal_count"], 240)
+        self.assertEqual(self.summary["advanced_math_reserve_count"], 160)
+        self.assertEqual(self.summary["default_run_item_count"], 1350)
         self.assertTrue(all(item["version"] == "QB-v1.3" for item in self.items))
-        self.assertTrue(all(item["qa_status"] == "ready" for item in self.items))
+        self.assertEqual(sum(item["qa_status"] == "ready" for item in self.items), 1350)
+        self.assertEqual(sum(item["qa_status"] == "frozen" for item in self.items), 160)
 
     def test_all_new_exec_harnesses_accept_reference_implementations(self):
         new_exec_items = [
