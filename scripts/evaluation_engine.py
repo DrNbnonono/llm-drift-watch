@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from provider_runtime import ProviderError, ProviderRegistry, classify_error_message, normalize_billing_usage
+from advanced_math_scoring import score_advanced_math
 from question_bank_runtime import (
     FINAL_BANK,
     MANIFESTS,
@@ -359,6 +360,9 @@ def score_item(item: dict[str, Any], response_payload: dict[str, Any]) -> tuple[
         score = 1.0 if pred == gold else 0.0
         details.update({"predicted": pred, "gold": gold})
         return score, details
+
+    if method == "advanced_math":
+        return score_advanced_math(response_payload.get("text", ""), item.get("scoring_params") or {})
 
     if method == "numeric_or_label_em":
         text = response_payload.get("text", "")
@@ -970,7 +974,7 @@ class EvaluationRunService:
         if isinstance(explicit, dict) and explicit.get("mode") in {"deterministic", "judge"}:
             return explicit
         deterministic = {
-            "exact_match", "em", "numeric_em", "numeric_or_label_em", "exec", "rule",
+            "exact_match", "em", "numeric_em", "numeric_or_label_em", "advanced_math", "exec", "rule",
             "constraint_set", "span_em_f1", "injection_resilience", "escalation_resilience",
             "pseudo_compliance_resilience", "citation_verification",
         }
