@@ -45,6 +45,44 @@
         null
       ]
     },
+    "difficulty_tier": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "foundation",
+        "advanced_hs",
+        "olympiad",
+        "undergraduate",
+        "stretch",
+        null
+      ]
+    },
+    "prerequisites": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "reasoning_profile": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "discrimination_profile": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "answer_contract": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
     "drift_role": {
       "type": "string",
       "enum": [

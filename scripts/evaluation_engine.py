@@ -205,7 +205,7 @@ def filter_items(
     # Draft/pilot items are inspectable in the bank and may be run by explicit ID,
     # but must never leak into routine module/smoke runs or longitudinal scores.
     filtered = items if question_ids else [
-        item for item in items if item.get("qa_status", "ready") in {"ready", "frozen"}
+        item for item in items if item.get("qa_status", "ready") == "ready"
     ]
     if modules:
         allowed = set(modules)
@@ -1086,6 +1086,7 @@ class EvaluationRunService:
         module: str | None = None,
         subtype: str | None = None,
         item_format: str | None = None,
+        difficulty_tier: str | None = None,
         qa_status: str | None = None,
         include_archived: bool = True,
         keyword: str | None = None,
@@ -1097,6 +1098,7 @@ class EvaluationRunService:
             module=module,
             subtype=subtype,
             item_format=item_format,
+            difficulty_tier=difficulty_tier,
             qa_status=qa_status,
             include_archived=include_archived,
             keyword=keyword,
@@ -1163,6 +1165,10 @@ class EvaluationRunService:
         qa_status = payload.get("qa_status") or "ready"
         if qa_status not in ("draft", "pilot", "ready", "frozen", "retired"):
             raise ValueError("qa_status must be one of draft, pilot, ready, frozen, retired")
+        difficulty_tier = payload.get("difficulty_tier") or None
+        allowed_tiers = {"foundation", "advanced_hs", "olympiad", "undergraduate", "stretch"}
+        if difficulty_tier not in allowed_tiers | {None}:
+            raise ValueError("difficulty_tier must be a supported advanced math tier")
         result = {
             "question_id": question_id,
             "version": payload.get("version") or "QB-v1.3",
@@ -1170,6 +1176,11 @@ class EvaluationRunService:
             "subtype": payload.get("subtype") or None,
             "item_format": item_format,
             "difficulty": payload.get("difficulty"),
+            "difficulty_tier": difficulty_tier,
+            "prerequisites": list(payload.get("prerequisites") or []),
+            "reasoning_profile": payload.get("reasoning_profile") or None,
+            "discrimination_profile": payload.get("discrimination_profile") or None,
+            "answer_contract": payload.get("answer_contract") or None,
             "drift_role": payload.get("drift_role") or "capability",
             "prompt_template": payload.get("prompt_template") or None,
             "turn_script": payload.get("turn_script") or None,

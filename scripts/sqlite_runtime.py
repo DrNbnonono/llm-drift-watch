@@ -391,6 +391,7 @@ class SQLiteStore:
             conn.execute("UPDATE bank_items SET qa_status = 'ready' WHERE qa_status IS NULL OR qa_status = ''")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_items_qa_status ON bank_items(qa_status)")
             self._ensure_column(conn, "bank_items", "difficulty", "TEXT")
+            self._ensure_column(conn, "bank_items", "difficulty_tier", "TEXT")
             self._ensure_column(conn, "bank_items", "drift_role", "TEXT")
             self._ensure_column(conn, "bank_items", "module_quota_tag", "TEXT")
             self._ensure_column(conn, "bank_items", "notes", "TEXT")
@@ -405,10 +406,11 @@ class SQLiteStore:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_items_item_format ON bank_items(item_format)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_items_version ON bank_items(version)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_items_difficulty ON bank_items(difficulty)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_items_difficulty_tier ON bank_items(difficulty_tier)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_items_drift_role ON bank_items(drift_role)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_items_module_quota_tag ON bank_items(module_quota_tag)")
             # Backfill: copy from full_item_json for any rows missing the new columns
-            for col in ("difficulty", "drift_role", "module_quota_tag", "notes"):
+            for col in ("difficulty", "difficulty_tier", "drift_role", "module_quota_tag", "notes"):
                 nulls = conn.execute(
                     f"SELECT question_id, full_item_json FROM bank_items WHERE {col} IS NULL OR {col} = ''"
                 ).fetchall()
@@ -463,6 +465,7 @@ class SQLiteStore:
                 full_item_json TEXT NOT NULL,
                 qa_status TEXT NOT NULL DEFAULT 'ready',
                 difficulty TEXT,
+                difficulty_tier TEXT,
                 drift_role TEXT,
                 module_quota_tag TEXT,
                 notes TEXT,
@@ -916,6 +919,7 @@ class SQLiteStore:
         module: str | None = None,
         subtype: str | None = None,
         item_format: str | None = None,
+        difficulty_tier: str | None = None,
         qa_status: str | None = None,
         include_archived: bool = True,
         keyword: str | None = None,
@@ -936,6 +940,9 @@ class SQLiteStore:
         if item_format:
             clauses.append("item_format = ?")
             params.append(item_format)
+        if difficulty_tier:
+            clauses.append("difficulty_tier = ?")
+            params.append(difficulty_tier)
         if qa_status:
             clauses.append("qa_status = ?")
             params.append(qa_status)
@@ -1090,6 +1097,16 @@ class SQLiteStore:
                 """,
                 scoped_params,
             ).fetchall()
+            difficulty_tiers = conn.execute(
+                f"""
+                SELECT difficulty_tier AS value, COUNT(*) AS count
+                FROM bank_items
+                {scoped_where}{' AND' if scoped_where else ' WHERE'} difficulty_tier IS NOT NULL AND difficulty_tier != ''
+                GROUP BY difficulty_tier
+                ORDER BY difficulty_tier
+                """,
+                scoped_params,
+            ).fetchall()
         subtype_meta: dict[str, dict[str, Any]] = {}
         for row in subtypes:
             entry = subtype_meta.setdefault(row["value"], {"value": row["value"], "count": 0, "modules": []})
@@ -1110,6 +1127,9 @@ class SQLiteStore:
                 key=lambda item: (item["modules"][0] if item["modules"] else "", item["value"]),
             ),
             "item_formats": [{"value": row["value"], "count": int(row["count"])} for row in item_formats],
+            "difficulty_tiers": [
+                {"value": row["value"], "count": int(row["count"])} for row in difficulty_tiers
+            ],
         }
 
     def get_run(self, run_id: str) -> dict[str, Any] | None:
@@ -1256,8 +1276,8 @@ class SQLiteStore:
             INSERT INTO bank_items (
                 question_id, version, module, subtype, item_format, prompt_template,
                 turn_script_json, ground_truth_json, scoring_method, scoring_params_json,
-                rotation_policy_json, provenance_json, qa_status, search_text, full_item_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                rotation_policy_json, provenance_json, qa_status, difficulty_tier, search_text, full_item_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(version, question_id) DO UPDATE SET
                 module=excluded.module,
                 subtype=excluded.subtype,
@@ -1270,6 +1290,7 @@ class SQLiteStore:
                 rotation_policy_json=excluded.rotation_policy_json,
                 provenance_json=excluded.provenance_json,
                 qa_status=excluded.qa_status,
+                difficulty_tier=excluded.difficulty_tier,
                 search_text=excluded.search_text,
                 full_item_json=excluded.full_item_json,
                 updated_at=CURRENT_TIMESTAMP
@@ -1288,6 +1309,7 @@ class SQLiteStore:
                 json_dumps(row.get("rotation_policy", {})),
                 json_dumps(row.get("provenance", {})),
                 row.get("qa_status") or "ready",
+                row.get("difficulty_tier"),
                 search_text,
                 json_dumps(row),
             ),
